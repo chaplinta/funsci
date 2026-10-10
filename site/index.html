@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Funding Explorer</title>
+<meta name="description" content="Australian research funding outcomes: ARC, NHMRC, MRFF, block grants, research income and philanthropy, with a focus on basic science in Western Australia.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>Australian Research Funding Explorer</h1>
+    <p class="sub">ARC, NHMRC and MRFF grants, university block grants, research income, WA Government and philanthropy. Focus: basic science in Western Australia.</p>
+    <nav id="tabs" role="tablist">
+      <button data-tab="overview" class="on">Overview</button>
+      <button data-tab="wa">WA basic science</button>
+      <button data-tab="inst">Institutions</button>
+      <button data-tab="search">Grant search</button>
+      <button data-tab="other">Philanthropy &amp; WA Govt</button>
+      <button data-tab="sql">SQL</button>
+      <button data-tab="about">Data &amp; methods</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="loading" class="note">Loading database…</div>
+
+  <section id="filters" class="filters" hidden>
+    <label>From <select id="f-from"></select></label>
+    <label>To <select id="f-to"></select></label>
+    <fieldset id="f-sources"><legend>Funders</legend></fieldset>
+    <label>Field <select id="f-field"><option value="">All fields</option></select></label>
+    <label class="chk"><input type="checkbox" id="f-basic"> Basic / discovery only</label>
+  </section>
+
+  <section data-panel="overview" class="panel">
+    <div class="tiles" id="ov-tiles"></div>
+    <figure class="card"><figcaption>Competitive grant funding by commencement year (A$m)</figcaption><div id="ov-year"></div></figure>
+    <figure class="card"><figcaption>Share of national funding by state (bars) against share of population (ticks)</figcaption><div id="ov-state"></div><div class="tbl" id="ov-state-tbl"></div></figure>
+    <figure class="card"><figcaption>WA share of funding over time (dashed line: WA share of population)</figcaption><div id="ov-washare"></div></figure>
+  </section>
+
+  <section data-panel="wa" class="panel" hidden>
+    <p class="note">Basic science = ARC Discovery program (Discovery Projects, DECRA, Future and Laureate Fellowships, Discovery Indigenous) plus NHMRC grants in the "Basic Science" broad research area, excluding humanities and social sciences. Use the Field filter to narrow further.</p>
+    <div class="tiles" id="wa-tiles"></div>
+    <figure class="card"><figcaption>WA basic science funding by year and funder (A$m)</figcaption><div id="wa-year"></div></figure>
+    <figure class="card"><figcaption>Basic science funding per capita by state (A$ per resident, selected years)</figcaption><div id="wa-percap"></div></figure>
+    <figure class="card"><figcaption>WA institutions (A$m, selected years)</figcaption><div id="wa-inst"></div></figure>
+    <figure class="card"><figcaption>WA basic science by field of research (A$m, selected years)</figcaption><div id="wa-field"></div></figure>
+  </section>
+
+  <section data-panel="inst" class="panel" hidden>
+    <div class="row"><label>Institution <select id="inst-pick"></select></label></div>
+    <div class="tiles" id="inst-tiles"></div>
+    <figure class="card"><figcaption>Competitive grants by year and funder (A$m)</figcaption><div id="inst-year"></div></figure>
+    <figure class="card"><figcaption>Research block grants (RTP and RSP, A$m)</figcaption><div id="inst-block"></div></figure>
+    <figure class="card"><figcaption>HERDC research income by category (A$m)</figcaption><div id="inst-herdc"></div></figure>
+    <figure class="card"><figcaption>Top schemes (selected years)</figcaption><div class="tbl" id="inst-schemes"></div></figure>
+    <figure class="card"><figcaption>Philanthropy and WA Government funding recorded for this institution</figcaption><div class="tbl" id="inst-phil"></div></figure>
+  </section>
+
+  <section data-panel="search" class="panel" hidden>
+    <div class="row">
+      <label class="grow">Keyword (title, investigator, scheme) <input id="s-q" type="search" placeholder="e.g. quantum, malaria, Smith"></label>
+      <label>State <select id="s-state"><option value="">All</option></select></label>
+      <label class="grow">Organisation <input id="s-org" type="search" placeholder="e.g. Curtin"></label>
+      <button id="s-csv" class="btn">Download CSV</button>
+    </div>
+    <p class="note" id="s-count"></p>
+    <div class="tbl" id="s-table"></div>
+  </section>
+
+  <section data-panel="other" class="panel" hidden>
+    <p class="note">Hand-curated from annual reports, media releases and government announcements. Coverage is partial: philanthropic and state funding has no national dataset. Each row links to its source.</p>
+    <figure class="card"><figcaption>Philanthropic commitments to WA research by year (A$m)</figcaption><div id="ph-year"></div></figure>
+    <figure class="card"><figcaption>Philanthropy</figcaption><div class="tbl" id="ph-table"></div></figure>
+    <figure class="card"><figcaption>WA Government research programs</figcaption><div class="tbl" id="wa-table"></div></figure>
+  </section>
+
+  <section data-panel="sql" class="panel" hidden>
+    <p class="note">Query the database directly (SQLite). Tables: <code>grants</code>, <code>organisations</code>, <code>block_grants</code>, <code>research_income</code>, <code>philanthropy</code>, <code>state_programs</code>, <code>sources</code>. Grant summaries are only in the full download.</p>
+    <textarea id="sql-q" rows="7" spellcheck="false">SELECT o.name, g.source, COUNT(*) AS grants, ROUND(SUM(g.amount_aud)/1e6,1) AS aud_m
+FROM grants g JOIN organisations o ON o.id = g.org_id
+WHERE g.state = 'WA' AND g.basic_science = 1
+GROUP BY 1, 2 ORDER BY aud_m DESC LIMIT 20;</textarea>
+    <div class="row"><button id="sql-run" class="btn">Run</button><button id="sql-csv" class="btn">Download CSV</button></div>
+    <p class="note" id="sql-msg"></p>
+    <div class="tbl" id="sql-out"></div>
+  </section>
+
+  <section data-panel="about" class="panel" hidden>
+    <div class="prose">
+      <h2>Sources</h2>
+      <div class="tbl" id="ab-sources"></div>
+      <p>Built <span id="ab-built"></span>. Refreshed weekly by GitHub Actions. Status "cached" means the upstream site failed on the last run and the previous data were kept.</p>
+      <p><a href="data/funding.sqlite">Download web database</a> · <a href="data/funding-full.sqlite.gz">Download full database with grant summaries (gzip)</a> · <a href="https://github.com/chaplinta/funsci">Source code</a></p>
+      <h2>Methods</h2>
+      <ul>
+        <li><b>Amounts</b> are the total awarded value of each grant (current value for ARC), counted in the grant's commencement or application year, in nominal dollars. They are not annual expenditure.</li>
+        <li><b>State</b> is the state of the administering organisation, which is where the money is managed, not necessarily where all research happens.</li>
+        <li><b>Basic science</b>: ARC Discovery program schemes (DP, DE, FT, FL, IN) and NHMRC grants classed in the Basic Science broad research area. MRFF is mission-directed and not counted as basic.</li>
+        <li><b>Field</b> is derived from the primary Field of Research (FoR) division, 2008 or 2020 codes. Natural sciences: 01–07, 30, 31, 34, 37, 41, 49, 51. Engineering &amp; IT: 08–10, 40, 46. Health &amp; medical: 11, 32, 42. NHMRC and MRFF grants without a FoR code are classed Health &amp; medical.</li>
+        <li><b>Per capita</b> uses ABS estimated resident population, June 2024, for every year. Treat as indicative.</li>
+        <li><b>Organisation names</b> are matched to canonical names via an alias table (<code>data/manual/organisations.csv</code>). ARC reports the current administering organisation only.</li>
+        <li><b>Block grants and HERDC income</b> come from Department of Education spreadsheets, whose layouts change between years. Check the source status above for gaps.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<footer class="wrap foot">Data: Australian Research Council, National Health and Medical Research Council, Department of Health and Aged Care, Department of Education, WA Government, organisation reports. Not affiliated with any of them.</footer>
+
+<script src="vendor/d3.min.js"></script>
+<script src="vendor/plot.umd.min.js"></script>
+<script src="vendor/sql-wasm.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

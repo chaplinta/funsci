@@ -1,0 +1,19 @@
+{
+  "data": [
+    {"type": "grant", "id": "DP200100001", "attributes": {
+      "code": "DP200100001", "scheme-name": "Discovery Projects",
+      "funding-commencement-year": 2020,
+      "current-admin-organisation": "The University of Western Australia",
+      "lead-investigator": "Prof Jane Smith",
+      "current-funding-amount": 450000,
+      "grant-summary": "Quantum materials.",
+      "primary-field-of-research": "0206 - Quantum Physics"}},
+    {"type": "grant", "id": "LP210200002", "attributes": {
+      "code": "LP210200002", "scheme-name": "Linkage Projects",
+      "funding-commencement-year": 2021,
+      "current-admin-organisation": "University of Sydney",
+      "current-funding-amount": "$300,000",
+      "primary-field-of-research": "4005 - Civil Engineering"}}
+  ],
+  "links": {"next": null}
+}
