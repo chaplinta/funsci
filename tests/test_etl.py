@@ -60,9 +60,10 @@ def offline(monkeypatch, tmp_path):
             monkeypatch.setattr(mod, "fetch", fake_fetch)
         if hasattr(mod, "find_links"):
             monkeypatch.setattr(mod, "find_links", fake_links)
-    from etl.sources import nhmrc, mrff
+    from etl.sources import nhmrc, mrff, crc
     monkeypatch.setattr(nhmrc, "LANDING", ["nhmrc"])
     monkeypatch.setattr(mrff, "LANDING", [])
+    monkeypatch.setattr(crc, "PROGRAMS", {})
     monkeypatch.setattr(education, "RBG_LANDING", ["rbg"])
     monkeypatch.setattr(education, "HERDC_LANDING", ["herdc"])
     return tmp_path
@@ -120,3 +121,36 @@ def test_publish(offline):
     assert c.execute("SELECT count(*) FROM grants WHERE summary IS NOT NULL").fetchone()[0] == 0
     meta = json.loads((offline / "site" / "meta.json").read_text())
     assert {s["name"] for s in meta["sources"]} >= {"ARC", "NHMRC"}
+
+
+def test_crc_tables(monkeypatch):
+    from etl.sources import crc
+    page = """<h2>CRC Projects Round 15 outcomes (announced February 2024)</h2>
+    <table><tr><th>Lead participant</th><th>Project title</th><th>State</th><th>Grant amount (GST exclusive)</th></tr>
+    <tr><td>Curtin University</td><td>Green steel</td><td>WA</td><td>$2,950,000</td></tr>
+    <tr><td>Acme Pty Ltd</td><td>Robots</td><td>VIC</td><td>$1,000,000</td></tr></table>"""
+    monkeypatch.setattr(crc, "PROGRAMS", {"CRC-P": "https://x/crcp"})
+    monkeypatch.setattr(crc, "find_links", lambda url, pat: [])
+    monkeypatch.setattr(crc, "fetch", lambda url, **_: page)
+    rows = crc.load()["grants"]
+    assert [(r["org_raw"], r["amount_aud"], r["round_year"], r["scheme"]) for r in rows] == [
+        ("Curtin University", 2950000.0, 2024, "CRC-P Round 15"),
+        ("Acme Pty Ltd", 1000000.0, 2024, "CRC-P Round 15")]
+
+
+def test_archive_fallback(monkeypatch, tmp_path):
+    import requests
+    calls = []
+
+    def fake_get(url, retries):
+        calls.append(url)
+        if "web.archive.org" not in url:
+            raise requests.Timeout("stalled")
+        return b"archived"
+    monkeypatch.setattr(harvest, "_get", fake_get)
+    monkeypatch.setattr(harvest, "CACHE", tmp_path)
+    monkeypatch.setattr(harvest, "DEAD_HOSTS", set())
+    assert harvest.fetch("https://slow.gov.au/a", use_cache=False) == "archived"
+    assert harvest.fetch("https://slow.gov.au/b", use_cache=False) == "archived"
+    # second URL on the same host goes straight to the archive
+    assert [c for c in calls if "slow.gov.au/b" in c and "archive" not in c] == []

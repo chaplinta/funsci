@@ -16,10 +16,11 @@ import shutil
 import sqlite3
 from pathlib import Path
 
+from etl import harvest
 from etl.normalise import OrgIndex
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = ["arc", "nhmrc", "mrff", "education", "manual"]
+SOURCES = ["arc", "nhmrc", "mrff", "crc", "education", "manual"]
 log = logging.getLogger("run")
 
 GRANT_COLS = ["id", "source", "scheme", "round_year", "title", "summary", "org_id", "org_raw",
@@ -64,7 +65,7 @@ def carry_over(conn, orgs, prev, name):
     old.row_factory = sqlite3.Row
     orgname = "(SELECT name FROM organisations o WHERE o.id=t.org_id)"
     data = {}
-    if name in ("ARC", "NHMRC", "MRFF"):
+    if name in ("ARC", "NHMRC", "MRFF", "CRC"):
         cols = [c for c in GRANT_COLS if c not in ("org_id", "state")]
         rows = old.execute(f"SELECT {','.join(cols)}, state AS state_raw FROM grants t "
                            "WHERE source=?", (name,)).fetchall()
@@ -92,10 +93,13 @@ def build(out, previous=None, only=None):
         mod = importlib.import_module(f"etl.sources.{modname}")
         if only and mod.NAME not in only:
             continue
+        harvest.ARCHIVE_HITS.clear()
         try:
             data = mod.load(samples_dir=samples)
             n = insert(conn, orgs, data)
             status, note, url = "ok", None, data.get("url")
+            if harvest.ARCHIVE_HITS:
+                note = f"{len(harvest.ARCHIVE_HITS)} file(s) via web.archive.org (origin blocked)"
             if n == 0 and previous:
                 raise RuntimeError("source returned no rows")
         except Exception as e:  # noqa: BLE001

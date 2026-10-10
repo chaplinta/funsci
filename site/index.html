@@ -11,7 +11,7 @@
 <header class="top">
   <div class="wrap">
     <h1>Australian Research Funding Explorer</h1>
-    <p class="sub">ARC, NHMRC and MRFF grants, university block grants, research income, WA Government and philanthropy. Focus: basic science in Western Australia.</p>
+    <p class="sub">ARC, NHMRC, MRFF and CRC grants, university block grants, research income, WA Government and philanthropy. Focus: basic science in Western Australia.</p>
     <nav id="tabs" role="tablist">
       <button data-tab="overview" class="on">Overview</button>
       <button data-tab="wa">WA basic science</button>
@@ -100,7 +100,8 @@ GROUP BY 1, 2 ORDER BY aud_m DESC LIMIT 20;</textarea>
       <ul>
         <li><b>Amounts</b> are the total awarded value of each grant (current value for ARC), counted in the grant's commencement or application year, in nominal dollars. They are not annual expenditure.</li>
         <li><b>State</b> is the state of the administering organisation, which is where the money is managed, not necessarily where all research happens.</li>
-        <li><b>Basic science</b>: ARC Discovery program schemes (DP, DE, FT, FL, IN) and NHMRC grants classed in the Basic Science broad research area. MRFF is mission-directed and not counted as basic.</li>
+        <li><b>Basic science</b>: ARC Discovery program schemes (DP, DE, FT, FL, IN) and NHMRC grants classed in the Basic Science broad research area. MRFF (mission-directed) and CRC / CRC-P (industry-led) are not counted as basic.</li>
+        <li><b>CRC</b> rows are Commonwealth grant funding to Cooperative Research Centres and CRC Projects, credited to the lead organisation. Participant cash and in-kind contributions are not included.</li>
         <li><b>Field</b> is derived from the primary Field of Research (FoR) division, 2008 or 2020 codes. Natural sciences: 01–07, 30, 31, 34, 37, 41, 49, 51. Engineering &amp; IT: 08–10, 40, 46. Health &amp; medical: 11, 32, 42. NHMRC and MRFF grants without a FoR code are classed Health &amp; medical.</li>
         <li><b>Per capita</b> uses ABS estimated resident population, June 2024, for every year. Treat as indicative.</li>
         <li><b>Organisation names</b> are matched to canonical names via an alias table (<code>data/manual/organisations.csv</code>). ARC reports the current administering organisation only.</li>
@@ -109,7 +110,7 @@ GROUP BY 1, 2 ORDER BY aud_m DESC LIMIT 20;</textarea>
     </div>
   </section>
 </main>
-<footer class="wrap foot">Data: Australian Research Council, National Health and Medical Research Council, Department of Health and Aged Care, Department of Education, WA Government, organisation reports. Not affiliated with any of them.</footer>
+<footer class="wrap foot">Data: Australian Research Council, National Health and Medical Research Council, Department of Health and Aged Care, Department of Industry, Science and Resources, Department of Education, WA Government, organisation reports. Not affiliated with any of them.</footer>
 
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/plot.umd.min.js"></script>

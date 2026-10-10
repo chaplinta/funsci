@@ -1,7 +1,7 @@
 /* Australian Research Funding Explorer: loads the SQLite DB in the browser and draws views. */
 "use strict";
 
-const GRANT_SOURCES = ["ARC", "NHMRC", "MRFF"];
+const GRANT_SOURCES = ["ARC", "NHMRC", "MRFF", "CRC"];
 const STATES = ["WA", "NSW", "VIC", "QLD", "SA", "TAS", "ACT", "NT"];
 // ABS estimated resident population, June 2024.
 const POP = { NSW: 8469595, VIC: 6959205, QLD: 5560452, WA: 2951602, SA: 1878029,
@@ -67,7 +67,7 @@ function where(extra = [], opts = {}) {
 
 /* ---------- rendering helpers ---------- */
 function colorScale() {
-  return { domain: GRANT_SOURCES, range: ["--s1", "--s2", "--s3"].map(css), legend: true };
+  return { domain: GRANT_SOURCES, range: ["--s1", "--s2", "--s3", "--s4"].map(css), legend: true };
 }
 
 function plotInto(sel, opts) {

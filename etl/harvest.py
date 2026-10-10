@@ -34,7 +34,32 @@ SESSION.headers.update({
     "Accept-Language": "en-AU,en;q=0.9",
 })
 TIMEOUT = (15, 60)  # connect, read
-DEAD_HOSTS = set()  # hosts that timed out once are skipped for the rest of the run
+DEAD_HOSTS = set()  # hosts that timed out once go straight to the archive for the rest of the run
+WAYBACK = "https://web.archive.org/web/{ts}id_/{url}"  # id_ = original bytes, no rewriting
+ARCHIVE_HITS = []  # URLs served from the Internet Archive this run
+
+
+def _get(url, retries):
+    for attempt in range(retries):
+        try:
+            r = SESSION.get(url, timeout=TIMEOUT)
+            r.raise_for_status()
+            return r.content
+        except requests.Timeout:
+            raise
+        except requests.RequestException as e:
+            if attempt == retries - 1:
+                raise
+            log.warning("retry %s: %s", url, e)
+            time.sleep(2 ** (attempt + 1))
+
+
+def _from_archive(url, retries):
+    """Latest Internet Archive snapshot of url (used when the origin blocks cloud runners)."""
+    data = _get(WAYBACK.format(ts=time.strftime("%Y%m%d"), url=url), retries)
+    ARCHIVE_HITS.append(url)
+    log.info("archive.org copy used for %s", url)
+    return data
 
 
 def fetch(url, binary=False, retries=3, use_cache=True):
@@ -42,27 +67,19 @@ def fetch(url, binary=False, retries=3, use_cache=True):
         data = Path(url).read_bytes()
         return data if binary else data.decode("utf-8", errors="replace")
     host = urlparse(url).hostname
-    if host in DEAD_HOSTS:
-        raise requests.ConnectionError(f"skipping {host}: timed out earlier in this run")
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / hashlib.sha1(url.encode()).hexdigest()
     if use_cache and path.exists():
         data = path.read_bytes()
+    elif host in DEAD_HOSTS:
+        data = _from_archive(url, retries)
     else:
-        for attempt in range(retries):
-            try:
-                r = SESSION.get(url, timeout=TIMEOUT)
-                r.raise_for_status()
-                data = r.content
-                break
-            except requests.Timeout:
-                DEAD_HOSTS.add(host)
-                raise
-            except requests.RequestException as e:
-                if attempt == retries - 1:
-                    raise
-                log.warning("retry %s: %s", url, e)
-                time.sleep(2 ** (attempt + 1))
+        try:
+            data = _get(url, retries)
+        except requests.Timeout:
+            log.warning("%s timed out; using archive.org for this host", host)
+            DEAD_HOSTS.add(host)
+            data = _from_archive(url, retries)
         path.write_bytes(data)
     return data if binary else data.decode("utf-8", errors="replace")
 
@@ -105,28 +122,45 @@ def read_tables(content, synonyms, required, filename=""):
     synonyms: {canonical: [header variants]}; required: canonical fields that
     must all be present for a sheet to count.
     """
-    syn = {k: {_norm(v) for v in vs} for k, vs in synonyms.items()}
     if filename.lower().endswith(".csv"):
         sheets = {"csv": pd.read_csv(io.BytesIO(content), header=None, dtype=object)}
     else:
         sheets = pd.read_excel(io.BytesIO(content), sheet_name=None, header=None, dtype=object)
     for name, raw in sheets.items():
-        for i in range(min(40, len(raw))):
-            cells = list(raw.iloc[i].values)
-            found = _score_header(cells, syn)
-            if not set(required) <= found:
-                continue
-            cols = {}
-            for j, c in enumerate(cells):
-                n = _norm(c)
-                for field, variants in syn.items():
-                    if n in variants and field not in cols:
-                        cols[field] = j
-            df = raw.iloc[i + 1:, list(cols.values())]
-            df.columns = list(cols.keys())
-            df = df.dropna(how="all")
-            yield name, df.reset_index(drop=True)
-            break
+        df = map_columns(raw, synonyms, required)
+        if df is not None:
+            yield name, df
+
+
+def map_columns(raw, synonyms, required):
+    """Find the header row in a header-less frame and return canonical columns, or None."""
+    syn = {k: {_norm(v) for v in vs} for k, vs in synonyms.items()}
+    for i in range(min(40, len(raw))):
+        cells = list(raw.iloc[i].values)
+        if not set(required) <= _score_header(cells, syn):
+            continue
+        cols = {}
+        for j, c in enumerate(cells):
+            n = _norm(c)
+            for field, variants in syn.items():
+                if n in variants and field not in cols:
+                    cols[field] = j
+        df = raw.iloc[i + 1:, list(cols.values())]
+        df.columns = list(cols.keys())
+        return df.dropna(how="all").reset_index(drop=True)
+    return None
+
+
+def html_tables(html):
+    """Yield (nearest preceding heading text, header-less DataFrame) for each <table>."""
+    soup = BeautifulSoup(html, "html.parser")
+    for t in soup.find_all("table"):
+        h = t.find_previous(["h1", "h2", "h3", "h4", "caption"])
+        rows = [[c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])] for tr in t.find_all("tr")]
+        rows = [r for r in rows if r]
+        if rows:
+            width = max(len(r) for r in rows)
+            yield (h.get_text(" ", strip=True) if h else ""), pd.DataFrame([r + [None] * (width - len(r)) for r in rows])
 
 
 def year_from_name(s):
