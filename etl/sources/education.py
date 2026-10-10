@@ -15,16 +15,19 @@ RBG_LANDING = [
 HERDC_LANDING = [
     "https://www.education.gov.au/node/3974",  # research and development income time series
     "https://www.education.gov.au/research-block-grants/higher-education-research-data-collection-herdc",
+    "https://www.education.gov.au/research-block-grants/consolidated-time-series-data",
 ]
 RBG_EXTRA, HERDC_EXTRA = [], []
 
 INST = ["institution", "higher education provider", "provider", "university", "heps",
-        "higher education institution", "institution name"]
+        "higher education institution", "institution name", "hep name", "provider name"]
 RBG_SYN = {
     "org": INST,
     "year": ["year", "allocation year", "funding year"],
     "RTP": ["rtp", "research training program", "research training program rtp", "rtp allocation"],
     "RSP": ["rsp", "research support program", "research support program rsp", "rsp allocation"],
+    "program": ["program", "programme", "grant program"],
+    "amount": ["amount", "allocation", "funding"],
 }
 HERDC_SYN = {
     "org": INST,
@@ -52,6 +55,13 @@ def _links(pages, extra, label):
 
 
 def _long(df, value_cols, file_year):
+    if not value_cols:  # already long: one row per org, year, program
+        for rec in df.to_dict("records"):
+            org, amt = rec.get("org"), to_amount(rec.get("amount"))
+            year = to_year(rec.get("year")) or file_year
+            if isinstance(org, str) and org.strip() and year and amt is not None and rec.get("program"):
+                yield org.strip(), year, str(rec["program"]).strip(), amt
+        return
     for rec in df.to_dict("records"):
         org = rec.get("org")
         if not isinstance(org, str) or not org.strip() or re.match(r"(?i)\s*(grand )?total", org):
@@ -73,7 +83,7 @@ def _harvest(pages, extra, syn, value_cols, label):
             content = fetch(url, binary=True)
             for sheet, df in read_tables(content, syn, ["org"], url):
                 present = [c for c in value_cols if c in df.columns]
-                if not present:
+                if not present and not {"program", "amount"} <= set(df.columns):
                     continue
                 fy = year_from_name(url) or year_from_name(str(sheet))
                 out += list(_long(df, present, fy))

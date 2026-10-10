@@ -154,3 +154,27 @@ def test_archive_fallback(monkeypatch, tmp_path):
     assert harvest.fetch("https://slow.gov.au/b", use_cache=False) == "archived"
     # second URL on the same host goes straight to the archive
     assert [c for c in calls if "slow.gov.au/b" in c and "archive" not in c] == []
+
+
+def test_crcp_partner_table(monkeypatch):
+    from etl.sources import crc
+    page = """<h2>Successful CRC Projects Round 12</h2><table>
+    <tr><th>Title</th><th>Partners*</th><th>Description</th><th>Start/End Date</th><th>Total Grant amount</th><th>Total Project Value</th></tr>
+    <tr><td>Cannabinoids</td><td><p>Cannapacific Pty Ltd</p><p>Curtin University</p></td><td>x</td>
+        <td>15 Jan 2022 - 15 Dec 2024</td><td>$3,000,000</td><td>$8,014,982</td></tr></table>"""
+    monkeypatch.setattr(crc, "PROGRAMS", {"CRC-P": "https://x/crcp"})
+    monkeypatch.setattr(crc, "find_links", lambda url, pat: [])
+    monkeypatch.setattr(crc, "fetch", lambda url, **_: page)
+    r = crc.load()["grants"][0]
+    assert (r["org_raw"], r["amount_aud"], r["round_year"], r["scheme"]) == (
+        "Cannapacific Pty Ltd", 3000000.0, 2022, "CRC-P Round 12")
+
+
+def test_rbg_long_format():
+    from etl.sources import education
+    content = xlsx({"Table 2": pd.DataFrame([
+        ["Table 2: Research block grant"],
+        ["HEP Code", "HEP Name", "Year", "State", "Cohort", "Program", "Amount"],
+        [3040, "Curtin University", 2010, "WA", "ATN", "JRE", 5000000]])})
+    df = next(harvest.read_tables(content, education.RBG_SYN, ["org"], "x.xlsx"))[1]
+    assert list(education._long(df, [], None)) == [("Curtin University", 2010, "JRE", 5000000.0)]

@@ -262,12 +262,13 @@ const views = {
     const t = q(`SELECT COUNT(*) n, SUM(amount_aud) s FROM grants g WHERE ${w}`, p)[0];
     const f = filters();
     const blk = q("SELECT SUM(amount_aud) s FROM block_grants WHERE org_id=? AND year BETWEEN ? AND ?", [id, f.from, f.to])[0].s;
+    const blkLabel = "Research block grants";
     const inc = q("SELECT SUM(amount_aud) s FROM research_income WHERE org_id=? AND category='Total' AND year BETWEEN ? AND ?",
       [id, f.from, f.to])[0].s;
     tiles("#inst-tiles", [
       ["Competitive grants", fmtInt(t.n), yearsLabel()],
       ["Competitive amount", fmtB(t.s || 0), "selected funders"],
-      ["Block grants (RTP+RSP)", blk ? fmtB(blk) : "–", yearsLabel()],
+      [blkLabel, blk ? fmtB(blk) : "–", yearsLabel()],
       ["HERDC research income", inc ? fmtB(inc) : "–", yearsLabel()],
     ]);
 
@@ -278,11 +279,12 @@ const views = {
       marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
     });
 
-    const b = q("SELECT year, program, amount_aud/1e6 m FROM block_grants WHERE org_id=? AND year BETWEEN ? AND ?", [id, f.from, f.to]);
+    const b = q(`SELECT year, CASE WHEN program IN ('RTP','RSP') THEN program ELSE 'Earlier schemes' END program,
+                 SUM(amount_aud)/1e6 m FROM block_grants WHERE org_id=? AND year BETWEEN ? AND ? GROUP BY 1,2`, [id, f.from, f.to]);
     if (!b.length) empty("#inst-block", "No block grant data for this organisation.");
     else plotInto("#inst-block", {
       height: 240, x: yearX(), y: { label: "A$m", grid: true },
-      color: { domain: ["RTP", "RSP"], range: [css("--s1"), css("--s2")], legend: true },
+      color: { domain: ["RTP", "RSP", "Earlier schemes"], range: [css("--s1"), css("--s2"), css("--s3")], legend: true },
       marks: [Plot.barY(b, { x: "year", y: "m", fill: "program", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
     });
 

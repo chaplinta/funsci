@@ -20,8 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "build" / "cache"
 log = logging.getLogger("harvest")
 
-# Direct spreadsheet links, plus education.gov.au style /download/.../document/xlsx.
-SHEET_LINK = r"(\.(xlsx?|csv)($|\?))|(/document/(xlsx?|csv)$)"
+# Direct spreadsheet links, plus education.gov.au style /download/<node>/.../xlsx.
+SHEET_LINK = r"(\.(xlsx?|csv)($|\?))|(/download/.*/(xlsx?|csv)$)"
 
 RAW = ROOT / "data" / "raw"
 
@@ -169,7 +169,8 @@ def html_tables(html):
     soup = BeautifulSoup(html, "html.parser")
     for t in soup.find_all("table"):
         h = t.find_previous(["h1", "h2", "h3", "h4", "caption"])
-        rows = [[c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])] for tr in t.find_all("tr")]
+        # " | " keeps list items apart (e.g. several partner organisations in one cell)
+        rows = [[" | ".join(c.stripped_strings) for c in tr.find_all(["th", "td"])] for tr in t.find_all("tr")]
         rows = [r for r in rows if r]
         if rows:
             width = max(len(r) for r in rows)

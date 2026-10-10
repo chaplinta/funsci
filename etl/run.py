@@ -100,7 +100,7 @@ def build(out, previous=None, only=None):
             status, note, url = "ok", None, data.get("url")
             if harvest.ARCHIVE_HITS:
                 note = f"{len(harvest.ARCHIVE_HITS)} file(s) via web.archive.org (origin blocked)"
-            if n == 0 and previous:
+            if n == 0:
                 raise RuntimeError("source returned no rows")
         except Exception as e:  # noqa: BLE001
             log.exception("%s failed", mod.NAME)
