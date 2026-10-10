@@ -6,7 +6,7 @@ the program and selection-round-outcome pages.
 import logging
 import re
 
-from etl.harvest import fetch, find_links, html_tables, map_columns, year_from_name
+from etl.harvest import describe, fetch, find_links, html_tables, map_columns, year_from_name
 from etl.sources.sheets import GRANT_SYNONYMS, _row
 
 log = logging.getLogger("crc")
@@ -33,7 +33,7 @@ def _pages():
     for prog, url in PROGRAMS.items():
         pages.append((prog, url))
         try:
-            for link in find_links(url, r"outcome"):
+            for link in find_links(url, r"outcome|recipient|funded|successful"):
                 if (prog, link) not in pages:
                     pages.append((prog, link))
         except Exception as e:  # noqa: BLE001
@@ -51,12 +51,15 @@ def load(samples_dir=None):
             log.warning("CRC page failed %s: %s", url, e)
             continue
         ok += 1
-        for heading, raw in html_tables(html):
+        tables = list(html_tables(html))
+        log.info("CRC %s: %d tables", url, len(tables))
+        for heading, raw in tables:
             df = map_columns(raw, SYN, ["org", "amount"])
             if df is None:
                 # centre tables may list only the CRC itself; credit the centre
                 df = map_columns(raw, SYN, ["title", "amount"])
                 if df is None:
+                    log.info("CRC table under '%s' not recognised; starts %s", heading[:60], describe(raw, 2))
                     continue
                 df["org"] = df["title"]
             rnd = re.search(r"round\s*(\d+)", heading, re.I)

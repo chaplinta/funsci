@@ -94,12 +94,22 @@ def find_links(page_url, pattern):
     """Absolute URLs of anchors on page_url whose href matches pattern."""
     soup = BeautifulSoup(fetch(page_url), "html.parser")
     rx = re.compile(pattern, re.I)
-    out = []
+    out, other = [], []
     for a in soup.find_all("a", href=True):
         href = urljoin(page_url, a["href"])
         if rx.search(href) and href not in out:
             out.append(href)
+        elif re.search(r"download|document|\.xls|outcome|time.series", href, re.I):
+            other.append(f"{a.get_text(' ', strip=True)[:50]} -> {href}")
+    if not out:
+        log.info("no links matching %r on %s (%d anchors); candidates: %s",
+                 pattern, page_url, len(soup.find_all("a")), other[:15])
     return out
+
+
+def describe(raw, n=4):
+    """Short text preview of a header-less frame's first rows, for diagnostics."""
+    return [[str(c)[:30] for c in r if str(c) not in ("nan", "None")][:10] for r in raw.head(n).values.tolist()]
 
 
 def _norm(s):
@@ -130,6 +140,9 @@ def read_tables(content, synonyms, required, filename=""):
         df = map_columns(raw, synonyms, required)
         if df is not None:
             yield name, df
+        else:
+            log.info("%s sheet %r: no header with %s; starts %s", filename[-60:], name, required,
+                     describe(raw.dropna(how="all")))
 
 
 def map_columns(raw, synonyms, required):
