@@ -2,7 +2,7 @@
 import logging
 import re
 
-from etl.harvest import SHEET_LINK, fetch, find_links, read_tables, year_from_name
+from etl.harvest import SHEET_LINK, fetch, find_links, local_files, read_tables, year_from_name
 from etl.normalise import to_amount, to_year
 
 log = logging.getLogger("education")
@@ -41,8 +41,8 @@ HERDC_SYN = {
 }
 
 
-def _links(pages, extra):
-    urls = list(extra)
+def _links(pages, extra, label):
+    urls = local_files(label) + list(extra)
     for p in pages:
         try:
             urls += [u for u in find_links(p, SHEET_LINK) if u not in urls]
@@ -67,7 +67,7 @@ def _long(df, value_cols, file_year):
 
 def _harvest(pages, extra, syn, value_cols, label):
     out, ok = [], 0
-    urls = _links(pages, extra)
+    urls = _links(pages, extra, label)
     for url in urls:
         try:
             content = fetch(url, binary=True)
@@ -90,5 +90,7 @@ def load(samples_dir=None):
     blocks = _harvest(RBG_LANDING, RBG_EXTRA, RBG_SYN, ["RTP", "RSP"], "RBG")
     income = _harvest(HERDC_LANDING, HERDC_EXTRA, HERDC_SYN,
                       ["Cat 1", "Cat 2", "Cat 3", "Cat 4", "Total"], "HERDC")
+    if not blocks and not income:
+        raise RuntimeError("Education: no block grant or HERDC data found (sites unreachable?)")
     return {"block_grants": blocks, "research_income": income,
             "url": ", ".join(RBG_LANDING + HERDC_LANDING)}

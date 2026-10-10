@@ -3,7 +3,7 @@ import hashlib
 import logging
 import re
 
-from etl.harvest import fetch, find_links, read_tables, year_from_name
+from etl.harvest import fetch, find_links, local_files, read_tables, year_from_name
 from etl.normalise import field_group, for_parts, to_amount, to_year
 
 log = logging.getLogger("sheets")
@@ -35,7 +35,7 @@ GRANT_SYNONYMS = {
 
 def load_grant_sheets(source, landing_pages, link_pattern, extra_urls=(),
                       classify=None, default_field=None):
-    urls = list(extra_urls)
+    urls = local_files(source) + list(extra_urls)
     for page in landing_pages:
         try:
             urls += [u for u in find_links(page, link_pattern) if u not in urls]
@@ -58,7 +58,9 @@ def load_grant_sheets(source, landing_pages, link_pattern, extra_urls=(),
             log.info("%s: %s -> %d rows", source, url, len(rows) - n0)
         except Exception as e:  # noqa: BLE001
             log.warning("%s file failed %s: %s", source, url, e)
-    if urls and not files_ok:
+    if not urls:
+        raise RuntimeError(f"{source}: no spreadsheets found (landing pages unreachable?)")
+    if not files_ok:
         raise RuntimeError(f"{source}: no spreadsheet could be parsed")
     return {"grants": rows, "url": ", ".join(landing_pages)}
 

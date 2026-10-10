@@ -10,7 +10,7 @@ import logging
 import re
 import time
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import pandas as pd
 import requests
@@ -23,12 +23,27 @@ log = logging.getLogger("harvest")
 # Direct spreadsheet links, plus education.gov.au style /download/.../document/xlsx.
 SHEET_LINK = r"(\.(xlsx?|csv)($|\?))|(/document/(xlsx?|csv)$)"
 
+RAW = ROOT / "data" / "raw"
+
+# Several .gov.au sites sit behind a bot filter that stalls non-browser clients.
 SESSION = requests.Session()
-SESSION.headers["User-Agent"] = (
-    "funsci-research-funding-explorer/1.0 (+https://github.com/chaplinta/funsci)")
+SESSION.headers.update({
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/140.0 Safari/537.36"),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-AU,en;q=0.9",
+})
+TIMEOUT = (15, 60)  # connect, read
+DEAD_HOSTS = set()  # hosts that timed out once are skipped for the rest of the run
 
 
 def fetch(url, binary=False, retries=3, use_cache=True):
+    if not url.startswith("http"):  # local file, e.g. data/raw/...
+        data = Path(url).read_bytes()
+        return data if binary else data.decode("utf-8", errors="replace")
+    host = urlparse(url).hostname
+    if host in DEAD_HOSTS:
+        raise requests.ConnectionError(f"skipping {host}: timed out earlier in this run")
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / hashlib.sha1(url.encode()).hexdigest()
     if use_cache and path.exists():
@@ -36,10 +51,13 @@ def fetch(url, binary=False, retries=3, use_cache=True):
     else:
         for attempt in range(retries):
             try:
-                r = SESSION.get(url, timeout=120)
+                r = SESSION.get(url, timeout=TIMEOUT)
                 r.raise_for_status()
                 data = r.content
                 break
+            except requests.Timeout:
+                DEAD_HOSTS.add(host)
+                raise
             except requests.RequestException as e:
                 if attempt == retries - 1:
                     raise
@@ -47,6 +65,12 @@ def fetch(url, binary=False, retries=3, use_cache=True):
                 time.sleep(2 ** (attempt + 1))
         path.write_bytes(data)
     return data if binary else data.decode("utf-8", errors="replace")
+
+
+def local_files(source):
+    """Spreadsheets saved by hand under data/raw/<source>/ (fallback for blocked sites)."""
+    d = RAW / source.lower()
+    return sorted(str(p) for p in d.glob("*") if p.suffix.lower() in (".xlsx", ".xls", ".csv"))
 
 
 def find_links(page_url, pattern):
