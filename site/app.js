@@ -794,8 +794,6 @@ const views = {
     ]);
   },
 
-  sql() {},
-
   about() {
     table("#ab-sources", q("SELECT * FROM sources"), [
       { key: "name", label: "Source" }, { key: "status", label: "Status" }, { label: "Rows", n: 1, f: (r) => fmtInt(r.rows) },
@@ -896,22 +894,6 @@ function render() {
   try { const r = views[current](); if (r && r.catch) r.catch((e) => console.error(e)); } catch (e) { console.error(e); }
 }
 
-function runSQL(forCsv) {
-  try {
-    const res = db.exec($("#sql-q").value);
-    const last = res[res.length - 1];
-    if (!last) { $("#sql-msg").textContent = "No rows."; $("#sql-out").replaceChildren(); return []; }
-    const rows = last.values.map((v) => Object.fromEntries(last.columns.map((c, i) => [c, v[i]])));
-    if (forCsv) return rows;
-    $("#sql-msg").textContent = `${fmtInt(rows.length)} rows${rows.length > 1000 ? " (showing 1,000)" : ""}.`;
-    table("#sql-out", rows.slice(0, 1000), last.columns.map((c) => ({ key: c, label: c })));
-    return rows;
-  } catch (e) {
-    $("#sql-msg").textContent = e.message;
-    return [];
-  }
-}
-
 async function init() {
   const SQL = await initSqlJs({ locateFile: (f) => `vendor/${f}` });
   const resp = await fetch("data/funding.sqlite");
@@ -986,14 +968,11 @@ async function init() {
     clearTimeout(timer); timer = setTimeout(render, 250);
   }));
   $("#s-csv").addEventListener("click", () => downloadCSV("grants.csv", views.search(50000)));
-  $("#sql-run").addEventListener("click", () => runSQL());
-  $("#sql-csv").addEventListener("click", () => downloadCSV("query.csv", runSQL(true)));
   document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab)));
   let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 200); });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
 
   $("#loading").remove();
-  runSQL();
   const fromHash = () => { const t = location.hash.slice(1); if (t !== current || !db) show(views[t] ? t : "overview"); };
   window.addEventListener("hashchange", fromHash);
   current = null;

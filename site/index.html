@@ -22,7 +22,6 @@
       <button data-tab="inst">Institutions</button>
       <button data-tab="search">Grant search</button>
       <button data-tab="other">Philanthropy &amp; WA Govt</button>
-      <button data-tab="sql">SQL</button>
       <button data-tab="about">Data &amp; methods</button>
     </nav>
   </div>
@@ -185,17 +184,6 @@
     <figure class="card"><figcaption>Philanthropic commitments to WA research by year (A$m)</figcaption><div id="ph-year"></div></figure>
     <figure class="card"><figcaption>Philanthropy</figcaption><div class="tbl" id="ph-table"></div></figure>
     <figure class="card"><figcaption>WA Government research programs</figcaption><div class="tbl" id="wa-table"></div></figure>
-  </section>
-
-  <section data-panel="sql" class="panel" hidden>
-    <p class="note">Query the database directly (SQLite). Tables: <code>grants</code>, <code>organisations</code>, <code>block_grants</code>, <code>research_income</code>, <code>philanthropy</code>, <code>state_programs</code>, <code>sources</code>. Grant summaries are only in the full download.</p>
-    <textarea id="sql-q" rows="7" spellcheck="false">SELECT o.name, g.source, COUNT(*) AS grants, ROUND(SUM(g.amount_aud)/1e6,1) AS aud_m
-FROM grants g JOIN organisations o ON o.id = g.org_id
-WHERE g.state = 'WA' AND g.basic_science = 1
-GROUP BY 1, 2 ORDER BY aud_m DESC LIMIT 20;</textarea>
-    <div class="row"><button id="sql-run" class="btn">Run</button><button id="sql-csv" class="btn">Download CSV</button></div>
-    <p class="note" id="sql-msg"></p>
-    <div class="tbl" id="sql-out"></div>
   </section>
 
   <section data-panel="about" class="panel" hidden>
