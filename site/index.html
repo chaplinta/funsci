@@ -38,6 +38,7 @@
     <fieldset id="f-sources"><legend>Funders</legend></fieldset>
     <label id="f-field-wrap">Field <select id="f-field"><option value="">All fields</option></select></label>
     <label id="f-topic-wrap">Topic <select id="f-topic"><option value="">All topics</option></select></label>
+    <label id="f-per-wrap">Per <select id="f-per"><option value="resident">resident</option><option value="student">student</option><option value="hdr">research student</option><option value="staff">academic staff (FTE)</option><option value="uni">university</option></select></label>
     <label id="f-credit-wrap">Researcher credit <select id="f-credit"><option value="split">Split among named investigators</option><option value="full">Full grant value</option></select></label>
     <label class="chk" id="f-kw-wrap"><input type="checkbox" id="f-kw" checked> Include keyword matches</label>
     <label class="chk"><input type="checkbox" id="f-basic"> Basic / discovery only</label>
@@ -46,9 +47,9 @@
   <section data-panel="overview" class="panel">
     <div class="tiles" id="ov-tiles"></div>
     <figure class="card"><figcaption>Competitive grant funding by commencement year (A$m)</figcaption><div id="ov-year"></div></figure>
-    <figure class="card"><figcaption>Share of national funding by state (bars) against share of population (ticks)</figcaption><div id="ov-state"></div><div class="tbl" id="ov-state-tbl"></div></figure>
-    <figure class="card"><figcaption>WA share of funding over time (dashed line: WA share of population)</figcaption><div id="ov-washare"></div></figure>
-    <figure class="card"><figcaption>A$ per resident by year, WA against the rest of Australia (selected funders; real dollars where ABS CPI is available)</figcaption><div id="ov-pc"></div></figure>
+    <figure class="card"><figcaption>Share of national funding by state (bars) against share of <span class="per-noun">population</span> (ticks)</figcaption><div id="ov-state"></div><div class="tbl" id="ov-state-tbl"></div></figure>
+    <figure class="card"><figcaption>WA share of funding over time (dashed line: WA share of <span class="per-noun">population</span>)</figcaption><div id="ov-washare"></div></figure>
+    <figure class="card"><figcaption>A$ <span class="per-lbl">per resident</span> by year, WA against the rest of Australia (selected funders; real dollars where ABS CPI is available)</figcaption><div id="ov-pc"></div></figure>
   </section>
 
   <section data-panel="trends" class="panel" hidden>
@@ -96,9 +97,9 @@
     <p class="note">Basic science = ARC Discovery program (Discovery Projects, DECRA, Future and Laureate Fellowships, Discovery Indigenous) plus NHMRC grants in the "Basic Science" broad research area, excluding humanities and social sciences. Use the Field filter to narrow further.</p>
     <div class="row"><label>Region <select id="wa-region"><option value="WA">WA</option><option value="EXWA">Australia excl. WA</option><option value="AUS">Australia</option></select></label></div>
     <div class="tiles" id="wa-tiles"></div>
-    <figure class="card"><figcaption>Basic science per resident by year: WA against the rest of Australia</figcaption><div id="wa-pc"></div></figure>
+    <figure class="card"><figcaption>Basic science <span class="per-lbl">per resident</span> by year: WA against the rest of Australia</figcaption><div id="wa-pc"></div></figure>
     <figure class="card"><figcaption id="wa-year-cap">Basic science funding by year and funder (A$m)</figcaption><div id="wa-year"></div></figure>
-    <figure class="card"><figcaption>Basic science funding per capita by state (A$ per resident, selected years; selected region highlighted)</figcaption><div id="wa-percap"></div></figure>
+    <figure class="card"><figcaption>Basic science funding by state (A$ <span class="per-lbl">per resident</span>, selected years; selected region highlighted)</figcaption><div id="wa-percap"></div></figure>
     <figure class="card"><figcaption id="wa-inst-cap">Institutions (A$m, selected years)</figcaption><div id="wa-inst"></div></figure>
     <figure class="card"><figcaption id="wa-field-cap">Basic science by field of research (A$m, selected years)</figcaption><div id="wa-field"></div></figure>
   </section>
@@ -114,10 +115,10 @@
     </div>
     <div class="tiles" id="blk-tiles"></div>
     <figure class="card"><figcaption>National block grants by year (A$m)</figcaption><div id="blk-year"></div></figure>
-    <figure class="card"><figcaption>Share of block grants by state (bars) against share of population (ticks), selected years</figcaption><div id="blk-state"></div></figure>
+    <figure class="card"><figcaption>Share of block grants by state (bars) against share of <span class="per-noun">population</span> (ticks), selected years</figcaption><div id="blk-state"></div></figure>
     <figure class="card"><figcaption>WA universities by year (A$m)</figcaption><div id="blk-wa"></div></figure>
-    <figure class="card"><figcaption>WA share of national block grants by year (dashed line: WA share of population)</figcaption><div id="blk-share"></div></figure>
-    <figure class="card"><figcaption>Block grants per resident by year: WA universities against the rest of Australia</figcaption><div id="blk-pc"></div></figure>
+    <figure class="card"><figcaption>WA share of national block grants by year (dashed line: WA share of <span class="per-noun">population</span>)</figcaption><div id="blk-share"></div></figure>
+    <figure class="card"><figcaption>Block grants <span class="per-lbl">per resident</span> by year: WA universities against the rest of Australia</figcaption><div id="blk-pc"></div></figure>
     <figure class="card"><figcaption>Universities, selected years: block grants against competitive grants (funders ticked above)</figcaption>
       <p class="note">Competitive = ARC, NHMRC, MRFF and CRC grants administered by the university, counted in commencement year. Ratio above 1 means the university gets more formula money than new competitive grants in the period.</p>
       <div class="row"><label>Show <select id="blk-region"><option value="">All universities</option><option value="WA">WA</option><option value="EXWA">Australia excl. WA</option></select></label></div>
@@ -145,7 +146,7 @@
     <figure class="card"><figcaption id="bio-share-cap">State share of each topic (bars) against population share (tick)</figcaption><div id="bio-share"></div></figure>
     <figure class="card"><figcaption id="bio-trend-cap">Selected topic by year and funder (A$m)</figcaption><div id="bio-trend"></div></figure>
     <figure class="card"><figcaption id="bio-pc-cap">Selected topic per resident, WA against the rest of Australia</figcaption><div id="bio-pc"></div></figure>
-    <figure class="card"><figcaption>Selected topic: A$ per resident by state (selected years)</figcaption><div id="bio-percap"></div></figure>
+    <figure class="card"><figcaption>Selected topic: A$ <span class="per-lbl">per resident</span> by state (selected years)</figcaption><div id="bio-percap"></div></figure>
     <figure class="card"><figcaption id="bio-inst-cap">Top institutions in the selected topic and state (A$m)</figcaption><div id="bio-inst"></div></figure>
     <figure class="card"><figcaption id="bio-people-cap">Top researchers in the selected topic and state</figcaption><div class="tbl" id="bio-people"></div></figure>
     <figure class="card"><figcaption>Largest grants in the selected topic and state</figcaption><div class="tbl" id="bio-grants"></div></figure>
@@ -205,6 +206,7 @@
         <li><b>Researcher links</b> (Institution, Google Scholar, LinkedIn, ORCID) open searches by name, not verified profiles, so check you have the right person. The institution search uses the organisation's website where known; co-investigators are searched by name only because the data doesn't say where they work.</li>
         <li><b>Researchers</b> are matched on surname plus first initial after stripping titles. ARC grants list every chief investigator where the ARC API provides them; NHMRC, MRFF and CRC list the lead only. By default grant amounts are split equally among named investigators; with full credit, researcher totals overlap.</li>
         <li><b>Per capita</b> uses ABS estimated resident population (June) for each year, from the ABS Data API. If that fetch fails, it falls back to June 2024 population for every year. Totals over several years are divided by the average population over those years.</li>
+        <li><b>Per student, research student, academic staff and university</b> use Department of Education higher education statistics: all-student and postgraduate-by-research headcounts, and academic staff FTE (teaching-only, research-only and teaching-and-research, including casuals where published), summed over each state's universities for each year. Grants to medical research institutes count in the state total, but institute staff and students are not in these statistics, which flatters states with large institutes. "Per university" divides by the number of universities in the statistics for that state and year.</li>
         <li><b>Real dollars</b> on trend charts are converted with the ABS Consumer Price Index (all groups, eight capitals, annual average) to the latest year. Other charts and tables are nominal.</li>
         <li><b>Australia excl. WA</b> is the other seven states and territories combined, using the state of the administering organisation.</li>
         <li><b>Per-investigator credit</b> splits each grant's value equally among the distinct people named on it. ARC lists every chief investigator; NHMRC, MRFF and CRC publish only the lead, so their grants are split by one. That overstates those leads against ARC teams; tick ARC only in Funders for a like-for-like view.</li>
