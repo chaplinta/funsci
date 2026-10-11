@@ -70,20 +70,37 @@ def _title(raw, upto):
     return " ".join(" ".join(_cells(raw.iloc[i].values)) for i in range(min(upto, len(raw))))
 
 
-def _rows(raw, header, cols, file_year, title):
-    """Yield (org, state, year, {col: value}) below the header row; tracks state sub-headings."""
+def _name_cols(cells):
+    """(institution column, state column or None) from a header row."""
+    low = [c.lower() for c in cells]
+    name = next((j for j, c in enumerate(low) if re.search(r"institution|provider", c)), 0)
+    state = next((j for j, c in enumerate(low) if c == "state" and j != name), None)
+    return name, state
+
+
+def _rows(raw, header, cols, file_year, title, name_col=0, state_col=None):
+    """Yield (org, state, year, {col: value}) below the header row.
+
+    Older files put state headings in the name column; newer ones have a State column
+    (filled on the first row of each group) next to an Institution column.
+    """
     year = year_from_name(title) or file_year
     state = None
     for i in range(header + 1, len(raw)):
         cells = _cells(raw.iloc[i].values)
-        name = cells[0] if cells else ""
+        if state_col is not None and state_col < len(cells) and cells[state_col]:
+            st = cells[state_col].upper().strip(" :*")
+            if re.search(r"(?i)total", st):
+                continue
+            state = norm_state(st) or state
+        name = cells[name_col] if name_col < len(cells) else ""
         if not name:
             continue
         up = name.upper().strip(" :*")
         if norm_state(up) or up in STATE_NAMES:
             state = norm_state(up)
             continue
-        if re.match(r"(?i)(total|grand total|all |sub-?total|note|source|\*|#|\()", name) or re.search(r"(?i)\btotal\b", name):
+        if re.match(r"(?i)(total|grand total|all |sub-?total|note|source|\*|#|\(|<)", name) or re.search(r"(?i)\btotal\b", name):
             continue
         vals = {k: to_amount(cells[j]) if j < len(cells) else None for k, j in cols.items()}
         if all(v is None for v in vals.values()):
@@ -95,7 +112,9 @@ def parse_students(content, url):
     out = []
     for sheet, raw in pd.read_excel(io.BytesIO(content), sheet_name=None, header=None, dtype=object).items():
         title = _title(raw, 6).lower()
-        if not ("all students" in title and ("institution" in title or "provider" in title)) or "commencing" in title:
+        # only the headcount by broad level of course table carries the research-student column
+        if not ("all students" in title and ("institution" in title or "provider" in title)
+                and "level of course" in title) or "commencing" in title or "load" in title:
             continue
         for h in range(min(30, len(raw))):
             cells = [c.lower() for c in _cells(raw.iloc[h].values)]
@@ -105,7 +124,8 @@ def parse_students(content, url):
                 cols = {"students": tot}
                 if hdr is not None:
                     cols["hdr"] = hdr
-                rows = list(_rows(raw, h, cols, year_from_name(url), title))
+                nc, sc = _name_cols(_cells(raw.iloc[h].values))
+                rows = list(_rows(raw, h, cols, year_from_name(url), title, nc, sc))
                 log.info("students %s / %s: %d universities", url[-60:], sheet, len(rows))
                 out += [(o, st, y, v["students"], v.get("hdr")) for o, st, y, v in rows if y]
                 break
@@ -129,8 +149,9 @@ def parse_staff(content, url):
                 cols = {"ro": ro, "tr": tr}
                 if to is not None:
                     cols["to"] = to
+                nc, sc = _name_cols(_cells(raw.iloc[h].values))
                 rows = [(o, st, y, sum(v[k] or 0 for k in cols), v["ro"]) for o, st, y, v in
-                        _rows(raw, h, cols, year_from_name(url), title) if y]
+                        _rows(raw, h, cols, year_from_name(url), title, nc, sc) if y]
                 log.info("staff %s / %s (%s): %d universities", url[-60:], sheet, title[:90], len(rows))
                 # prefer the table that includes casual staff, which is the usual headline FTE
                 if rows and ("casual" in title or not best):

@@ -322,3 +322,19 @@ def test_hestats_parsers():
         ["Curtin University", 500, 600, 900, 2500, 4500],
     ])})
     assert hestats.parse_staff(staff, "https://x/2023-staff.xlsx") == [("Curtin University", "WA", 2023, 2000.0, 600.0)]
+
+
+def test_hestats_new_layout():
+    from etl.sources import hestats
+    content = xlsx({"2.5": pd.DataFrame([
+        ["< Back to Contents >", None, None, None, None],
+        ["Table 2.5: All Students by State, Higher Education Institution and Broad Level of Course, 2024", None, None, None, None],
+        ["State", "Institution", "Postgraduate by Research", "Bachelor", "Total"],
+        ["Western Australia", "Curtin University", 1500, 30000, 58000],
+        [None, "Murdoch University", 800, 15000, 25000],
+        ["Total Western Australia", None, 9000, 1, 200000],
+        ["Victoria", "Monash University", 5000, 50000, 90000],
+    ])})
+    rows = hestats.parse_students(content, "https://x/2024-section-2-all-students.xlsx")
+    assert rows == [("Curtin University", "WA", 2024, 58000.0, 1500.0), ("Murdoch University", "WA", 2024, 25000.0, 800.0),
+                    ("Monash University", "VIC", 2024, 90000.0, 5000.0)]
