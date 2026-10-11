@@ -121,10 +121,11 @@ function empty(sel, msg = "No data for this selection.") {
   $(sel).innerHTML = `<p class="note">${msg}</p>`;
 }
 
-function table(sel, rows, cols) {
+function table(sel, rows, cols, grantKey) {
   if (!rows.length) return empty(sel);
   const head = cols.map((c) => `<th class="${c.n ? "n" : ""}">${esc(c.label)}</th>`).join("");
-  const body = rows.map((r) => "<tr>" + cols.map((c) => {
+  const tr = (r) => grantKey && r[grantKey] ? `<tr class="grow-row" data-grant="${esc(r[grantKey])}" tabindex="0">` : "<tr>";
+  const body = rows.map((r) => tr(r) + cols.map((c) => {
     const v = c.f ? c.f(r) : esc(r[c.key]);
     return `<td class="${c.n ? "n" : ""}">${v}</td>`;
   }).join("") + "</tr>").join("");
@@ -387,7 +388,7 @@ const views = {
       { key: "title", label: "Title" }, { key: "lead", label: "Lead investigator" }, { key: "org", label: "Organisation" },
       { key: "state", label: "State" }, { label: "Amount", n: 1, f: (r) => fmtM(r.amount_aud) },
       { label: "Basic", f: (r) => r.basic ? "yes" : "" },
-    ]);
+    ], "id");
   },
 
   other() {
@@ -482,7 +483,7 @@ const views = {
       { label: "Organisations", f: (r) => orgList(r.orgs) },
     ]);
 
-    table("#bio-grants", q(`SELECT g.round_year year, g.source, g.scheme, g.title, g.lead_investigator lead,
+    table("#bio-grants", q(`SELECT g.id, g.round_year year, g.source, g.scheme, g.title, g.lead_investigator lead,
                             (SELECT name_key FROM investigators WHERE grant_id = g.id AND role = 'lead') k,
                             COALESCE(o.name, g.org_raw) org, g.amount_aud
                             FROM grants g LEFT JOIN organisations o ON o.id = g.org_id
@@ -490,7 +491,7 @@ const views = {
       { key: "year", label: "Year" }, { key: "scheme", label: "Scheme" }, { key: "title", label: "Title" },
       { label: "Lead", f: (r) => who(r.k, r.lead) }, { key: "org", label: "Organisation" },
       { label: "Amount", n: 1, f: (r) => fmtM(r.amount_aud) },
-    ]);
+    ], "id");
   },
 
   people() {
@@ -556,7 +557,7 @@ const views = {
       { key: "year", label: "Year" }, { key: "source", label: "Funder" }, { key: "scheme", label: "Scheme" },
       { key: "title", label: "Title" }, { key: "role", label: "Role" }, { key: "org", label: "Organisation" },
       { label: "Amount", n: 1, f: (r) => fmtM(r.amount_aud) }, { label: "Basic", f: (r) => r.basic ? "yes" : "" },
-    ]);
+    ], "id");
   },
 
   blocks() {
@@ -656,6 +657,66 @@ const views = {
   },
 };
 
+/* ---------- grant detail ---------- */
+const SOURCE_PAGES = {
+  NHMRC: "https://www.nhmrc.gov.au/funding/data-research/outcomes",
+  MRFF: "https://www.health.gov.au/resources/publications/medical-research-future-fund-mrff-grant-recipients",
+  CRC: "https://business.gov.au/grants-and-programs/cooperative-research-centres-projects-crcp-grants/crc-projects-selection-round-outcomes",
+};
+const summaryCache = new Map();
+
+async function summaryFor(id) {
+  const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(id));
+  const key = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 2);
+  if (!summaryCache.has(key)) {
+    summaryCache.set(key, fetch(`data/summaries/${key}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})));
+  }
+  return (await summaryCache.get(key))[id];
+}
+
+function sourceLink(g) {
+  const code = g.id.split(":").slice(1).join(":");
+  if (g.source === "ARC") return [`https://dataportal.arc.gov.au/NCGP/Web/Grant/Grant/${encodeURIComponent(code)}`, "ARC Data Portal record"];
+  return SOURCE_PAGES[g.source] ? [SOURCE_PAGES[g.source], `${g.source} outcomes (source list)`] : null;
+}
+
+async function openGrant(id) {
+  const g = q(`SELECT g.*, o.name org_name, o.type org_type FROM grants g LEFT JOIN organisations o ON o.id = g.org_id
+               WHERE g.id = ?`, [id])[0];
+  if (!g) return;
+  const people = q(`SELECT name_key k, MAX(name) name, GROUP_CONCAT(DISTINCT role) roles FROM investigators
+                    WHERE grant_id = ? GROUP BY 1 ORDER BY MAX(role = 'lead') DESC, name`, [id]);
+  const topics = q("SELECT topic, method FROM grant_topics WHERE grant_id = ? ORDER BY topic", [id]);
+  const div = g.for_division ? `${g.for_division} ${FOR_NAMES[g.for_division] || ""}` : null;
+  const link = sourceLink(g);
+  const row = (k, v) => (v == null || v === "" ? "" : `<dt>${esc(k)}</dt><dd>${v}</dd>`);
+  $("#gd-title").textContent = g.title || g.id;
+  $("#gd-body").innerHTML = `
+    <div class="gd-amount">${g.amount_aud != null ? d3.format("$,.0f")(g.amount_aud) : "Amount not published"}</div>
+    <dl class="gd">
+      ${row("Grant ID", esc(g.id.split(":").slice(1).join(":")))}
+      ${row("Funder", esc(g.source))}
+      ${row("Scheme", esc(g.scheme))}
+      ${row("Year", esc(g.round_year))}
+      ${row("Administering organisation", esc(g.org_name || g.org_raw) + (g.state ? ` (${esc(g.state)})` : ""))}
+      ${row(people.length > 1 ? "Investigators" : "Investigator",
+        people.map((p) => `${who(p.k, p.name)}${p.roles && p.roles !== "CI" ? ` <span class="note">${esc(p.roles)}</span>` : ""}`).join("<br>"))}
+      ${row("Field of Research", g.for_code ? `${esc(g.for_code)}${div ? ` <span class="note">(${esc(div)})</span>` : ""}` : null)}
+      ${row("Field group", esc(g.field_group))}
+      ${row("Research area", esc(g.research_area))}
+      ${row("Biology topics", topics.map((t) => `${esc(t.topic)}${t.method === "keyword" ? ' <span class="note">(keyword)</span>' : ""}`).join("<br>"))}
+      ${row("Basic / discovery", g.basic_science ? "Yes" : "No")}
+    </dl>
+    <h3>Summary</h3><p id="gd-summary" class="note">Loading…</p>
+    ${link ? `<p><a href="${esc(link[0])}" target="_blank" rel="noopener">${esc(link[1])} ↗</a></p>` : ""}`;
+  const dlg = $("#grant-dlg");
+  if (!dlg.open) dlg.showModal();
+  dlg.scrollTop = 0;
+  const text = await summaryFor(id);
+  const el = $("#gd-summary");
+  if (el) { el.className = text ? "" : "note"; el.textContent = text || "No summary published for this grant."; }
+}
+
 /* ---------- wiring ---------- */
 let current = "overview";
 const FILTER_TABS = new Set(["overview", "wa", "bio", "people", "blocks", "inst", "search"]);
@@ -738,12 +799,21 @@ async function init() {
   $("#inst-pick").addEventListener("change", render);
   ["#bio-topic", "#bio-state", "#p-state", "#p-role"].forEach((s) => $(s).addEventListener("change", render));
   $("#p-q").addEventListener("input", () => { personKey = null; clearTimeout(timer); timer = setTimeout(render, 250); });
+  document.addEventListener("keydown", (e) => {
+    const row = e.target.closest && e.target.closest("tr[data-grant]");
+    if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openGrant(row.dataset.grant); }
+  });
+  $("#gd-close").addEventListener("click", () => $("#grant-dlg").close());
+  $("#grant-dlg").addEventListener("click", (e) => { if (e.target.id === "grant-dlg") e.target.close(); });
   $("#p-back").addEventListener("click", () => { personKey = null; render(); });
   $("#p-csv").addEventListener("click", () => personKey && downloadCSV(`${personKey.replace("|", "_")}.csv`, views.profile(personKey, true)));
   document.addEventListener("click", (e) => {
+    const row = e.target.closest("tr[data-grant]");
+    if (row && !e.target.closest("a")) { openGrant(row.dataset.grant); return; }
     const a = e.target.closest("a.who");
     if (!a) return;
     e.preventDefault();
+    if ($("#grant-dlg").open) $("#grant-dlg").close();
     personKey = a.dataset.key;
     if (current === "people") { render(); window.scrollTo(0, 0); } else { show("people"); window.scrollTo(0, 0); }
   });

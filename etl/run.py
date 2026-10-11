@@ -9,6 +9,7 @@ upstream page never empties the site.
 import argparse
 import datetime as dt
 import gzip
+import hashlib
 import importlib
 import json
 import logging
@@ -145,9 +146,30 @@ def build(out, previous=None, only=None):
     return db
 
 
+def shard(grant_id):
+    """Summary shard file for a grant id: first two hex digits of its SHA-1 (site/app.js mirrors this)."""
+    return hashlib.sha1(grant_id.encode()).hexdigest()[:2]
+
+
+def write_summaries(db, out_dir):
+    """Grant summaries as 256 small JSON files, fetched one at a time by the detail view."""
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    out_dir.mkdir(parents=True)
+    shards = {}
+    c = sqlite3.connect(db)
+    for gid, summary in c.execute("SELECT id, summary FROM grants WHERE summary IS NOT NULL AND summary <> ''"):
+        shards.setdefault(shard(gid), {})[gid] = summary
+    c.close()
+    for key, items in shards.items():
+        (out_dir / f"{key}.json").write_text(json.dumps(items, ensure_ascii=False, separators=(",", ":")))
+    return sum(len(v) for v in shards.values())
+
+
 def publish(db, site_data):
-    """Lite DB for the browser (no long summaries) plus gzipped full DB."""
+    """Lite DB for the browser (no long summaries), summary shards, and gzipped full DB."""
     site_data.mkdir(parents=True, exist_ok=True)
+    write_summaries(db, site_data / "summaries")
     lite = site_data / "funding.sqlite"
     shutil.copy(db, lite)
     c = sqlite3.connect(lite)

@@ -205,3 +205,12 @@ def test_links_built(offline):
     lead = c.execute("SELECT name, name_key, role FROM investigators WHERE grant_id='ARC:DP200100001'").fetchall()
     assert lead == [("Jane Smith", "smith|j", "lead")]
     assert c.execute("SELECT count(*) FROM investigators WHERE grant_id LIKE 'NHMRC:%'").fetchone()[0] == 2
+
+
+def test_summary_shards(offline):
+    db = run.build(offline / "build")
+    run.publish(db, offline / "site")
+    shard = json.loads((offline / "site" / "summaries" / f"{run.shard('ARC:DP200100001')}.json").read_text())
+    assert shard["ARC:DP200100001"] == "Quantum materials."
+    import hashlib
+    assert run.shard("ARC:DP200100001") == hashlib.sha1(b"ARC:DP200100001").hexdigest()[:2]

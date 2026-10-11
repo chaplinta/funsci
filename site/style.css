@@ -95,3 +95,25 @@ figure svg { overflow: visible; }
 .pname { font-size: 1.25rem; margin: 0; flex: 1 1 auto; }
 a.who { cursor: pointer; }
 .tbl table { min-width: 680px; }
+
+tr.grow-row { cursor: pointer; }
+tr.grow-row:hover td, tr.grow-row:focus td { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+tr.grow-row:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+dialog#grant-dlg {
+  width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px;
+}
+dialog#grant-dlg::backdrop { background: rgb(0 0 0 / 0.45); }
+.gd-head { display: flex; gap: 12px; align-items: flex-start; }
+.gd-head h2 { font-size: 1.15rem; margin: 0; flex: 1; }
+.gd-amount { font-size: 1.6rem; font-weight: 650; margin: 10px 0 6px; font-variant-numeric: tabular-nums; }
+dl.gd { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+dl.gd dt { color: var(--ink-2); font-size: .85rem; }
+dl.gd dd { margin: 0; }
+#grant-dlg h3 { font-size: 1rem; margin: 18px 0 6px; }
+#gd-summary { white-space: pre-line; }
+@media (max-width: 560px) {
+  dialog#grant-dlg { width: 100vw; max-width: 100vw; max-height: 100vh; height: 100vh; margin: 0; border-radius: 0; }
+  dl.gd { grid-template-columns: 1fr; gap: 2px; }
+  dl.gd dd { margin-bottom: 8px; }
+}
