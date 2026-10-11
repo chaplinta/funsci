@@ -97,6 +97,12 @@ function plotInto(sel, opts) {
 }
 
 const narrow = () => window.innerWidth < 640;
+// Continuous year axis with whole-year ticks only.
+function yearLineX(rows) {
+  const ys = [...new Set(rows.map((d) => d.year))].sort((a, b) => a - b);
+  const k = Math.ceil(ys.length / (narrow() ? 5 : 16));
+  return { label: null, tickFormat: "d", ticks: ys.filter((_, i) => i % k === 0) };
+}
 // Band year axis that thins its labels on narrow screens.
 function yearX(extra = {}) {
   const k = narrow() ? 4 : 1;
@@ -231,7 +237,7 @@ const views = {
                      FROM grants g WHERE ${w} GROUP BY 1,2 HAVING SUM(amount_aud) > 0`, p);
     if (!share.length) empty("#ov-washare");
     else plotInto("#ov-washare", {
-      height: 280, x: { label: null, tickFormat: "d" }, y: { label: "WA share", tickFormat: "%", grid: true, zero: true },
+      height: 280, x: yearLineX(share), y: { label: "WA share", tickFormat: "%", grid: true, zero: true },
       color: colorScale(),
       marks: [
         Plot.ruleY([POP.WA / POP_TOTAL], { stroke: css("--ink-3"), strokeDasharray: "4 4" }),
@@ -553,6 +559,90 @@ const views = {
     ]);
   },
 
+  blocks() {
+    const f = filters();
+    const yr = [f.from, f.to];
+    const grp = `CASE WHEN b.program IN ('RTP','RSP') THEN b.program ELSE 'Earlier schemes' END`;
+    const base = `FROM block_grants b JOIN organisations o ON o.id = b.org_id
+                  WHERE b.year BETWEEN ? AND ? AND b.program NOT LIKE '%total%'`;
+    const tot = q(`SELECT SUM(b.amount_aud) s, SUM(CASE WHEN o.state='WA' THEN b.amount_aud END) wa ${base}`, yr)[0];
+    const last = q(`SELECT MAX(b.year) y ${base}`, yr)[0].y;
+    const lastWA = last ? q(`SELECT SUM(b.amount_aud) s ${base} AND b.year = ? AND o.state = 'WA'`, [...yr, last])[0].s : null;
+    tiles("#blk-tiles", [
+      ["National block grants", fmtB(tot.s || 0), yearsLabel()],
+      ["To WA universities", fmtB(tot.wa || 0), yearsLabel()],
+      ["WA share", tot.s ? fmtPct((tot.wa || 0) / tot.s) : "–", `population share ${fmtPct(POP.WA / POP_TOTAL)}`],
+      [`WA in ${last || "latest year"}`, lastWA ? fmtM(lastWA) : "–", "all WA universities"],
+    ]);
+
+    const byYear = q(`SELECT b.year, ${grp} program, SUM(b.amount_aud)/1e6 m ${base} GROUP BY 1, 2`, yr);
+    const progs = ["RTP", "RSP", "Earlier schemes"];
+    if (!byYear.length) empty("#blk-year", "No block grant data loaded.");
+    else plotInto("#blk-year", {
+      height: 280, x: yearX(), y: { label: "A$m", grid: true },
+      color: { domain: progs, range: ["--s1", "--s2", "--s3"].map(css), legend: true },
+      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "program", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
+    });
+
+    const bs = q(`SELECT o.state, SUM(b.amount_aud) s ${base} AND o.state IS NOT NULL GROUP BY 1`, yr);
+    const total = d3.sum(bs, (d) => d.s);
+    const rows = STATES.map((st) => {
+      const r = bs.find((d) => d.state === st) || { s: 0 };
+      return { state: st, share: total ? r.s / total : 0, pop: POP[st] / POP_TOTAL, s: r.s };
+    });
+    if (!total) empty("#blk-state");
+    else plotInto("#blk-state", {
+      height: 260, marginLeft: 44, x: { label: "share of national block grants", tickFormat: "%", grid: true },
+      y: { label: null, domain: STATES },
+      marks: [
+        Plot.barX(rows, { y: "state", x: "share", rx: 2, tip: { format: { share: ".1%", fill: false } },
+          fill: (d) => d.state === "WA" ? css("--accent") : css("--muted-mark") }),
+        Plot.tickX(rows, { y: "state", x: "pop", stroke: css("--ink"), strokeWidth: 2 }),
+        Plot.ruleX([0]),
+      ],
+    });
+
+    const wa = q(`SELECT b.year, o.name uni, SUM(b.amount_aud)/1e6 m ${base} AND o.state = 'WA' GROUP BY 1, 2`, yr);
+    const unis = d3.groupSort(wa, (v) => -d3.sum(v, (d) => d.m), (d) => d.uni);
+    if (!wa.length) empty("#blk-wa");
+    else plotInto("#blk-wa", {
+      height: 300, x: yearLineX(wa), y: { label: "A$m", grid: true },
+      color: { domain: unis, range: ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"].map(css), legend: true },
+      marks: [
+        Plot.lineY(wa, { x: "year", y: "m", stroke: "uni", strokeWidth: 2 }),
+        Plot.dot(wa, { x: "year", y: "m", fill: "uni", r: 2.5 }),
+        Plot.tip(wa, Plot.pointer({ x: "year", y: "m", channels: { uni: "uni" }, format: { y: ",.1f" } })),
+      ],
+    });
+
+    const share = q(`SELECT b.year, SUM(CASE WHEN o.state='WA' THEN b.amount_aud ELSE 0 END)/SUM(b.amount_aud) share
+                     ${base} GROUP BY 1 HAVING SUM(b.amount_aud) > 0`, yr);
+    if (!share.length) empty("#blk-share");
+    else plotInto("#blk-share", {
+      height: 240, x: yearLineX(share), y: { label: "WA share", tickFormat: "%", grid: true, zero: true },
+      marks: [
+        Plot.ruleY([POP.WA / POP_TOTAL], { stroke: css("--ink-3"), strokeDasharray: "4 4" }),
+        Plot.lineY(share, { x: "year", y: "share", stroke: css("--accent"), strokeWidth: 2, tip: { format: { y: ".1%" } } }),
+      ],
+    });
+
+    const [w, p] = where([], { topic: null, basic: false });
+    const comp = new Map(q(`SELECT org_id, SUM(amount_aud) s FROM grants g WHERE ${w} GROUP BY 1`, p).map((r) => [r.org_id, r.s]));
+    const unisAll = q(`SELECT o.id, o.name, o.state, SUM(b.amount_aud) blk,
+                       SUM(CASE WHEN ${grp} = 'RTP' THEN b.amount_aud END) rtp,
+                       SUM(CASE WHEN ${grp} = 'RSP' THEN b.amount_aud END) rsp
+                       ${base} GROUP BY 1 ORDER BY blk DESC`, yr)
+      .map((r) => ({ ...r, comp: comp.get(r.id) || 0, ratio: comp.get(r.id) ? r.blk / comp.get(r.id) : null }));
+    unisAll.forEach((r, i) => { r.rank = i + 1; });
+    table("#blk-table", unisAll, [
+      { label: "#", n: 1, f: (r) => r.rank }, { label: "University", f: (r) => r.state === "WA" ? `<b>${esc(r.name)}</b>` : esc(r.name) },
+      { key: "state", label: "State" }, { label: "Block grants", n: 1, f: (r) => fmtM(r.blk) },
+      { label: "RTP", n: 1, f: (r) => fmtM(r.rtp) }, { label: "RSP", n: 1, f: (r) => fmtM(r.rsp) },
+      { label: "Competitive grants", n: 1, f: (r) => fmtM(r.comp) },
+      { label: "Block / competitive", n: 1, f: (r) => r.ratio == null ? "–" : d3.format(".2f")(r.ratio) },
+    ]);
+  },
+
   sql() {},
 
   about() {
@@ -568,7 +658,7 @@ const views = {
 
 /* ---------- wiring ---------- */
 let current = "overview";
-const FILTER_TABS = new Set(["overview", "wa", "bio", "people", "inst", "search"]);
+const FILTER_TABS = new Set(["overview", "wa", "bio", "people", "blocks", "inst", "search"]);
 
 function show(tab) {
   current = tab;
@@ -576,7 +666,10 @@ function show(tab) {
   document.querySelectorAll("[data-panel]").forEach((s) => { s.hidden = s.dataset.panel !== tab; });
   $("#filters").hidden = !FILTER_TABS.has(tab);
   $("#f-basic").parentElement.hidden = tab === "wa";
-  $("#f-topic-wrap").hidden = tab === "bio";
+  $("#f-topic-wrap").hidden = tab === "bio" || tab === "blocks";
+  // block grants are formula funding: only the year range applies (funders feed the comparison column)
+  ["#f-field-wrap", "#f-kw-wrap"].forEach((s) => { $(s).hidden = tab === "blocks"; });
+  if (tab === "blocks") $("#f-basic").parentElement.hidden = true;
   history.replaceState(null, "", `#${tab}`);
   render();
 }

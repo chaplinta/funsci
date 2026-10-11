@@ -17,6 +17,7 @@
       <button data-tab="wa">WA basic science</button>
       <button data-tab="bio">Biology topics</button>
       <button data-tab="people">Researchers</button>
+      <button data-tab="blocks">Block grants</button>
       <button data-tab="inst">Institutions</button>
       <button data-tab="search">Grant search</button>
       <button data-tab="other">Philanthropy &amp; WA Govt</button>
@@ -33,7 +34,7 @@
     <label>From <select id="f-from"></select></label>
     <label>To <select id="f-to"></select></label>
     <fieldset id="f-sources"><legend>Funders</legend></fieldset>
-    <label>Field <select id="f-field"><option value="">All fields</option></select></label>
+    <label id="f-field-wrap">Field <select id="f-field"><option value="">All fields</option></select></label>
     <label id="f-topic-wrap">Topic <select id="f-topic"><option value="">All topics</option></select></label>
     <label class="chk" id="f-kw-wrap"><input type="checkbox" id="f-kw" checked> Include keyword matches</label>
     <label class="chk"><input type="checkbox" id="f-basic"> Basic / discovery only</label>
@@ -53,6 +54,18 @@
     <figure class="card"><figcaption>Basic science funding per capita by state (A$ per resident, selected years)</figcaption><div id="wa-percap"></div></figure>
     <figure class="card"><figcaption>WA institutions (A$m, selected years)</figcaption><div id="wa-inst"></div></figure>
     <figure class="card"><figcaption>WA basic science by field of research (A$m, selected years)</figcaption><div id="wa-field"></div></figure>
+  </section>
+
+  <section data-panel="blocks" class="panel" hidden>
+    <p class="note">Research Block Grants are formula funding from the Department of Education to universities, not competitive grants. Since 2017 there are two: the Research Training Program (RTP, research students) and the Research Support Program (RSP, indirect costs of research). They are allocated mainly on each university's research income and research degree completions, so they follow past competitive success. Before 2017 the money went through several schemes (JRE, RIBG, SRE, RTS, APA, IPRS and others), grouped here as "Earlier schemes". Amounts are nominal dollars by allocation year.</p>
+    <div class="tiles" id="blk-tiles"></div>
+    <figure class="card"><figcaption>National block grants by year (A$m)</figcaption><div id="blk-year"></div></figure>
+    <figure class="card"><figcaption>Share of block grants by state (bars) against share of population (ticks), selected years</figcaption><div id="blk-state"></div></figure>
+    <figure class="card"><figcaption>WA universities by year (A$m)</figcaption><div id="blk-wa"></div></figure>
+    <figure class="card"><figcaption>WA share of national block grants by year (dashed line: WA share of population)</figcaption><div id="blk-share"></div></figure>
+    <figure class="card"><figcaption>Universities, selected years: block grants against competitive grants (funders ticked above)</figcaption>
+      <p class="note">Competitive = ARC, NHMRC, MRFF and CRC grants administered by the university, counted in commencement year. Ratio above 1 means the university gets more formula money than new competitive grants in the period.</p>
+      <div class="tbl" id="blk-table"></div></figure>
   </section>
 
   <section data-panel="inst" class="panel" hidden>
