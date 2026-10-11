@@ -236,7 +236,7 @@ def findings(r):
     dollars = f"{m['base_year']} dollars" if m["real_dollars"] else "nominal dollars (CPI unavailable)"
     wa, ex = t["WA"], t["EXWA"]
     out = [
-        f"Window: {y0}–{y1}. Series start in {m['first_year']}, the first year both ARC and NHMRC data are complete; "
+        f"Window: {y0}–{y1}. Series start in {m['first_year']}, the first year both ARC and NHMRC data are complete. "
         f"Latest complete year {y1}; later years are left out until their rounds are fully announced. "
         f"Amounts in {dollars}, per resident{' using each year’s population' if m['population_by_year'] else ' using 2024 population'}.",
         f"Basic science funding per resident changed {pct(wa['per_capita_10y'])} a year in WA over 10 years, "
@@ -266,7 +266,8 @@ def findings(r):
         parts = ([f"growing {fmt(up)}"] if up else []) + ([f"shrinking {fmt(down)}"] if down else [])
         out.append("Biology topics in WA, second half of the window against the first, per resident: "
                    + "; ".join(parts) + ".")
-    gaps = [x for x in r["topics"] if x.get("EXWA_late") and x.get("WA_late") is not None]
+    # only topics with meaningful money in both regions (at least $0.50 per resident a year)
+    gaps = [x for x in r["topics"] if (x.get("EXWA_late") or 0) >= 0.5 and (x.get("WA_late") or 0) >= 0.5]
     if gaps:
         worst = min(gaps, key=lambda x: x["WA_late"] / x["EXWA_late"] if x["EXWA_late"] else 9)
         best = max(gaps, key=lambda x: x["WA_late"] / x["EXWA_late"] if x["EXWA_late"] else 0)
