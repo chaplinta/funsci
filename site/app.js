@@ -830,6 +830,8 @@ const views = {
     };
     const dl = m.real_dollars ? `${m.base_year} dollars` : "nominal";
     lines("#tr-pc", "per_capita_real", `A$ per resident (${dl})`);
+    lines("#tr-acad", "per_academic_real", `A$ per academic, university FTE (${dl})`, "$,.0f");
+    lines("#tr-hdr", "per_hdr_real", `A$ per research student (${dl})`, "$,.0f");
     lines("#tr-grants", "grants", "grants per year", ",d");
     lines("#tr-mean", "mean_grant_real", `average grant, A$ (${dl})`, "$,.0f");
     lines("#tr-team", "arc_team", "average named investigators per ARC grant", ".2f");

@@ -64,6 +64,21 @@ class Data:
         for st, yr, n in conn.execute("SELECT state, year, persons FROM population"):
             self.pop[st][yr] = n
         self.cpi = dict(conn.execute("SELECT year, idx FROM cpi"))
+        self.staff, self.hdr = defaultdict(dict), defaultdict(dict)
+        try:
+            for st, yr, fte, hdr in conn.execute(
+                    """SELECT o.state, s.year, SUM(f.academic_fte), SUM(s.hdr_students) FROM student_stats s
+                       LEFT JOIN staff_stats f ON f.org_id = s.org_id AND f.year = s.year
+                       JOIN organisations o ON o.id = s.org_id WHERE o.state IS NOT NULL GROUP BY 1, 2"""):
+                if hdr:
+                    self.hdr[st][yr] = hdr
+            for st, yr, fte in conn.execute(
+                    """SELECT o.state, f.year, SUM(f.academic_fte) FROM staff_stats f
+                       JOIN organisations o ON o.id = f.org_id WHERE o.state IS NOT NULL GROUP BY 1, 2"""):
+                if fte:
+                    self.staff[st][yr] = fte
+        except sqlite3.OperationalError:
+            pass
         self.has_pop = bool(self.pop)
         self.has_cpi = bool(self.cpi)
         self.base_year = max(self.cpi) if self.cpi else None
@@ -77,6 +92,16 @@ class Data:
             else:
                 near = min(s, key=lambda y: abs(y - year))
                 total += s[near]
+        return total
+
+    def count(self, table, region, year):
+        """Academic FTE or research students in a region's universities (nearest year with data)."""
+        total = 0
+        for st in REGIONS[region]:
+            s = table.get(st)
+            if not s:
+                return None
+            total += s[min(s, key=lambda y: abs(y - year))]
         return total
 
     def real(self, amount, year):
@@ -127,9 +152,12 @@ def build(conn):
             e = by[y]
             real = d.real(e["amount"], y)
             pop = d.persons(r, y)
+            acad, hdr = d.count(d.staff, r, y), d.count(d.hdr, r, y)
             out.append({
                 "year": y, "nominal": e["amount"], "real": real, "grants": e["n"],
                 "per_capita_real": real / pop if pop else None,
+                "per_academic_real": real / acad if acad else None,
+                "per_hdr_real": real / hdr if hdr else None,
                 "mean_grant_real": real / e["n"] if e["n"] else None,
                 "arc_real": d.real(e["ARC"], y), "nhmrc_real": d.real(e["NHMRC"], y),
                 "arc_team": e["team"],
@@ -159,12 +187,17 @@ def build(conn):
         for n in (5, 10):
             ys = window(n)
             t[f"per_capita_{n}y"] = growth(ys, [s[y]["per_capita_real"] for y in ys])
+            t[f"per_academic_{n}y"] = growth(ys, [s[y]["per_academic_real"] for y in ys])
             t[f"grants_{n}y"] = growth(ys, [s[y]["grants"] for y in ys])
             t[f"mean_grant_{n}y"] = growth(ys, [s[y]["mean_grant_real"] for y in ys])
             t[f"arc_{n}y"] = growth(ys, [s[y]["arc_real"] for y in ys])
             t[f"nhmrc_{n}y"] = growth(ys, [s[y]["nhmrc_real"] for y in ys])
         ys = window(10)
         t["per_capita_last3_avg"] = statistics.mean([s[y]["per_capita_real"] or 0 for y in ys[-3:]]) if ys else None
+        last3 = lambda k: (statistics.mean([s[y][k] for y in ys[-3:] if s[y][k] is not None])
+                           if ys and any(s[y][k] is not None for y in ys[-3:]) else None)
+        t["per_academic_last3_avg"] = last3("per_academic_real")
+        t["per_hdr_last3_avg"] = last3("per_hdr_real")
         t["per_capita_first3_avg"] = statistics.mean([s[y]["per_capita_real"] or 0 for y in ys[:3]]) if ys else None
         pi = {e["year"]: e["per_investigator_real"] for e in per_inv[r]}
         t["per_investigator_10y"] = growth(ys, [pi[y] for y in ys])
@@ -245,6 +278,12 @@ def findings(r):
         f"Per resident, WA averaged {money(wa['per_capita_last3_avg'])} a year over the last three years "
         f"against {money(ex['per_capita_last3_avg'])} elsewhere "
         f"(first three years of the window: WA {money(wa['per_capita_first3_avg'])}, rest {money(ex['per_capita_first3_avg'])}).",
+        (f"Per academic staff member (university FTE), WA averaged {money(wa['per_academic_last3_avg'])} a year over the last three years "
+         f"against {money(ex['per_academic_last3_avg'])} elsewhere; per research student, {money(wa['per_hdr_last3_avg'])} against "
+         f"{money(ex['per_hdr_last3_avg'])}. 10-year trend per academic: WA {pct(wa['per_academic_10y'])} a year, rest {pct(ex['per_academic_10y'])}. "
+         "Institute staff are not in the university statistics, which flatters states with large institutes."
+         if wa.get("per_academic_last3_avg") and ex.get("per_academic_last3_avg") else
+         "Per-academic and per-student figures need the Department of Education statistics, which did not load."),
         f"WA's share of national basic science funding went from {pct(t['wa_share_first3'], False)} to "
         f"{pct(t['wa_share_last3'], False)} (three-year averages), a trend of "
         f"{t['wa_share_pp_per_year_10y']:+.2f} percentage points a year. WA has about 10.9% of the population."

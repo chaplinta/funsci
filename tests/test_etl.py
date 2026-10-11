@@ -321,7 +321,21 @@ def test_hestats_parsers():
         ["Western Australia", None, None, None, None, None],
         ["Curtin University", 500, 600, 900, 2500, 4500],
     ])})
-    assert hestats.parse_staff(staff, "https://x/2023-staff.xlsx") == [("Curtin University", "WA", 2023, 2000.0, 600.0)]
+    assert hestats.parse_staff(staff, "https://x/2023-staff.xlsx") == [(3, [("Curtin University", "WA", 2023, 2000.0, 600.0)])]
+
+
+def test_staff_table_choice():
+    from etl.sources import hestats
+    sc = hestats.staff_table_score
+    assert sc("Appendix 1.6. FTE for Full-time, Fractional Full-time and Actual Casual Staff by State, Higher Education Provider and Function, 2022") == 3
+    assert sc("Table 1.8 FTE for Full-time and Fractional Full-time Staff by State, Higher Education Provider and Function, 2022") == 2
+    for t in ["Table 2.7 Number of Full-time and Fractional Full-time Staff by State, Higher Education Provider and Function",
+              "Table 3.1 FTE for Full-time and Fractional Full-time Indigenous Staff by State, Higher Education Provider and Function",
+              "Appendix 1.7. FTE for Actual Casual Staff by State, Higher Education Provider and Function"]:
+        assert sc(t) == 0, t
+    a = [("Curtin University", "WA", 2022, 2000.0, 600.0)]
+    b = [("Curtin University", "WA", 2022, 2400.0, 650.0)]
+    assert hestats.best_staff([(2, a), (3, b)]) == b
 
 
 def test_hestats_new_layout():

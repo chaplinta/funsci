@@ -134,11 +134,31 @@ def parse_students(content, url):
     return out
 
 
+def staff_table_score(title):
+    """How good a staff table is as total academic FTE by university; 0 = unusable.
+
+    3: FTE for full-time, fractional full-time and actual casual staff (the headline figure)
+    2: FTE for full-time and fractional full-time staff
+    Headcount ("number of"), Indigenous/First Nations-only, casual-only and breakdowns by
+    gender, level or organisational unit are rejected.
+    """
+    t = title.lower()
+    if "fte" not in t or "function" not in t or ("institution" not in t and "provider" not in t):
+        return 0
+    if re.search(r"number of|indigenous|first nations|organisational unit|gender|level|duties|age", t):
+        return 0
+    if "casual" in t:
+        return 3 if "full-time" in t else 0
+    return 2 if "fractional" in t or "full-time" in t else 0
+
+
 def parse_staff(content, url):
-    best = []
+    """[(score, rows)] for each usable FTE-by-function table in the workbook."""
+    found = []
     for sheet, raw in pd.read_excel(io.BytesIO(content), sheet_name=None, header=None, dtype=object).items():
-        title = _title(raw, 6).lower()
-        if "function" not in title or ("institution" not in title and "provider" not in title):
+        title = _title(raw, 6)
+        score = staff_table_score(title)
+        if not score:
             continue
         for h in range(min(30, len(raw))):
             cells = [c.lower() for c in _cells(raw.iloc[h].values)]
@@ -151,15 +171,23 @@ def parse_staff(content, url):
                     cols["to"] = to
                 nc, sc = _name_cols(_cells(raw.iloc[h].values))
                 rows = [(o, st, y, sum(v[k] or 0 for k in cols), v["ro"]) for o, st, y, v in
-                        _rows(raw, h, cols, year_from_name(url), title, nc, sc) if y]
-                log.info("staff %s / %s (%s): %d universities", url[-60:], sheet, title[:90], len(rows))
-                # prefer the table that includes casual staff, which is the usual headline FTE
-                if rows and ("casual" in title or not best):
-                    best = rows
+                        _rows(raw, h, cols, year_from_name(url), title.lower(), nc, sc) if y]
+                log.info("staff %s / %s score %d (%s): %d universities", url[-50:], sheet, score, title.lower()[:80], len(rows))
+                if rows:
+                    found.append((score, rows))
                 break
-    if not best:
-        log.info("staff %s: no FTE-by-function table", url[-60:])
-    return best
+    return found
+
+
+def best_staff(candidates):
+    """One table per year: the highest-scoring, then the one covering most universities."""
+    by_year = {}
+    for score, rows in candidates:
+        y = rows[0][2]
+        key = (score, len(rows))
+        if y not in by_year or key > by_year[y][0]:
+            by_year[y] = (key, rows)
+    return [r for _, rows in by_year.values() for r in rows]
 
 
 def load(samples_dir=None):
@@ -169,11 +197,13 @@ def load(samples_dir=None):
             students += parse_students(fetch(url, binary=True), url)
         except Exception as e:  # noqa: BLE001
             log.warning("student file failed %s: %s", url, e)
+    candidates = []
     for url in _files("staff", STAFF_LANDING, r"staff|fte"):
         try:
-            staff += parse_staff(fetch(url, binary=True), url)
+            candidates += parse_staff(fetch(url, binary=True), url)
         except Exception as e:  # noqa: BLE001
             log.warning("staff file failed %s: %s", url, e)
+    staff = best_staff(candidates)
     log.info("HEStats: %d student rows (%d years), %d staff rows (%d years)",
              len(students), len({r[2] for r in students}), len(staff), len({r[2] for r in staff}))
     if not students and not staff:
