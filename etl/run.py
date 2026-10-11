@@ -18,14 +18,17 @@ import sqlite3
 from pathlib import Path
 
 from etl import harvest
-from etl.normalise import OrgIndex, classify_topics, clean_person, person_key
+from collections import Counter
+
+from etl.normalise import OrgIndex, classify_topics, clean_person, is_person, person_key
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ["abs", "arc", "nhmrc", "mrff", "crc", "education", "manual"]
 log = logging.getLogger("run")
+REJECTED = Counter()  # non-person "investigator" names seen this build
 
 GRANT_COLS = ["id", "source", "scheme", "round_year", "title", "summary", "org_id", "org_raw",
-              "state", "lead_investigator", "amount_aud", "for_code", "for_division",
+              "state", "lead_investigator", "lead_raw", "amount_aud", "for_code", "for_division",
               "research_area", "field_group", "basic_science"]
 
 
@@ -33,7 +36,11 @@ def insert(conn, orgs, data):
     n = 0
     for g in data.get("grants", []):
         oid, state = orgs.match(g["org_raw"], g.get("state_raw"))
-        g = {**g, "org_id": oid, "state": state}
+        lead = g.get("lead_investigator")
+        if lead and not is_person(lead):
+            REJECTED[str(lead).strip()] += 1
+        g = {**g, "org_id": oid, "state": state, "lead_raw": g.get("lead_raw", lead),
+             "lead_investigator": lead if is_person(lead) else None}
         conn.execute(f"INSERT OR REPLACE INTO grants({','.join(GRANT_COLS)}) "
                      f"VALUES ({','.join('?' * len(GRANT_COLS))})", [g.get(c) for c in GRANT_COLS])
         insert_links(conn, g)
@@ -77,6 +84,9 @@ def insert_links(conn, g):
     people = g.get("investigators") or []
     if g.get("lead_investigator") and not any(r == "lead" for _, r in people):
         people = [(g["lead_investigator"], "lead")] + list(people)
+    for raw, _ in people:
+        if raw and not is_person(raw) and raw != g.get("lead_raw"):
+            REJECTED[str(raw).strip()] += 1
     people = [(raw, role, person_key(raw)) for raw, role in people]
     people = [p for p in people if p[2]]
     n = len({k for _, _, k in people})
@@ -94,7 +104,8 @@ def carry_over(conn, orgs, prev, name):
     orgname = "(SELECT name FROM organisations o WHERE o.id=t.org_id)"
     data = {}
     if name in ("ARC", "NHMRC", "MRFF", "CRC"):
-        cols = [c for c in GRANT_COLS if c not in ("org_id", "state")]
+        have = {r[1] for r in old.execute("PRAGMA table_info(grants)")}  # older DBs lack newer columns
+        cols = [c for c in GRANT_COLS if c not in ("org_id", "state") and c in have]
         rows = old.execute(f"SELECT {','.join(cols)}, state AS state_raw FROM grants t "
                            "WHERE source=?", (name,)).fetchall()
         data["grants"] = [dict(r) for r in rows]
@@ -156,6 +167,9 @@ def build(out, previous=None, only=None):
                      (mod.NAME, url, now, n, status, note))
         conn.commit()
         log.info("%s: %s, %d rows", mod.NAME, status, n)
+    if REJECTED:
+        log.info("not people (%d names, %d uses), top 30: %s", len(REJECTED), sum(REJECTED.values()),
+                 REJECTED.most_common(30))
     conn.execute("VACUUM")
     conn.close()
     return db

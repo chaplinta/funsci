@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS grants (
   org_id INTEGER REFERENCES organisations(id),
   org_raw TEXT,
   state TEXT,
-  lead_investigator TEXT,
+  lead_investigator TEXT,             -- NULL when the published value isn't a person
+  lead_raw TEXT,                      -- lead as published
   amount_aud REAL,
   for_code TEXT,                      -- most specific FoR code given
   for_division TEXT,                  -- 2-digit FoR division

@@ -264,3 +264,33 @@ def test_analysis_runs(offline):
     r, md = analysis.run(db, offline, offline / "a.md")
     assert r["findings"] and "Basic science funding trends" in md
     assert (offline / "analysis.json").exists()
+
+
+def test_is_person():
+    from etl.normalise import is_person, person_key
+    for n in ["Research Admin Officer", "N/A", "TBA", "Research Office", "Curtin University", "Officer", "Director"]:
+        assert not is_person(n), n
+        assert person_key(n) is None
+    for n in ["Prof Jane Smith", "Dr Smith", "SMITH Jane", "A/Prof Lee Arnold", "Grant Hill"]:
+        assert is_person(n), n
+
+
+def test_placeholder_lead(offline, monkeypatch):
+    fix = json.loads((FIX / "arc_page.json").read_text())
+    fix["data"][0]["attributes"]["lead-investigator"] = "Research Admin Officer"
+    monkeypatch.setattr(arc, "fetch", lambda url, **_: json.dumps(fix))
+    c = sqlite3.connect(run.build(offline / "build"))
+    assert c.execute("SELECT lead_investigator, lead_raw, team_size FROM grants WHERE id='ARC:DP200100001'").fetchone() == \
+        (None, "Research Admin Officer", None)
+    assert c.execute("SELECT count(*) FROM investigators WHERE grant_id='ARC:DP200100001'").fetchone()[0] == 0
+
+
+def test_carry_over_from_older_db(offline, monkeypatch):
+    prev = run.build(offline / "prev")
+    c = sqlite3.connect(prev)
+    c.execute("ALTER TABLE grants DROP COLUMN lead_raw")
+    c.commit(); c.close()
+    from etl.sources import nhmrc
+    monkeypatch.setattr(nhmrc, "load", lambda **_: (_ for _ in ()).throw(RuntimeError("down")))
+    db = run.build(offline / "next", previous=prev)
+    assert sqlite3.connect(db).execute("SELECT count(*) FROM grants WHERE source='NHMRC'").fetchone()[0] == 2

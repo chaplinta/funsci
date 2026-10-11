@@ -210,8 +210,35 @@ def clean_person(name):
     return " ".join(p if not p.isupper() or len(p) == 1 else p.title() for p in parts) or None
 
 
+# Role, office and organisation words that show a "name" isn't a person (e.g. "Research Admin Officer").
+# "Grant" alone is a real name, so only the plural is listed.
+NOT_PERSON = re.compile(
+    r"\b(admin|administration|administrator|officer|office|manager|coordinator|research services|grants|"
+    r"secretariat|chief executive|ceo|universit(y|ies)|institute|centre|center|council|department|foundation|"
+    r"pty|ltd|limited|inc|csiro|hospital|health service|committee|team|group|consortium|network)\b", re.I)
+PLACEHOLDER = re.compile(
+    r"^\W*(n/?a|nil|none|null|tba|tbc|tbd|unknown|various|not applicable|not provided|confidential|"
+    r"withheld|redacted|director|investigator|chief investigator|-+)\W*$", re.I)
+
+
+def is_person(name):
+    """False for roles, offices, organisations and placeholders standing in for a person."""
+    if not name or not re.search(r"[A-Za-z]", str(name)):
+        return False
+    raw = str(name).strip()
+    if PLACEHOLDER.match(raw) or NOT_PERSON.search(raw):
+        return False
+    cleaned = clean_person(raw)
+    if not cleaned:
+        return False
+    # a lone word is only a person if it came with a title ("Dr Smith"), not "Officer"
+    return len(cleaned.split()) > 1 or bool(TITLES.search(raw))
+
+
 def person_key(name):
     """family|first-initial, lower case. Two people with the same surname and initial collide."""
+    if not is_person(name):
+        return None
     s = clean_person(name)
     if not s:
         return None
