@@ -1,6 +1,7 @@
 """ARC National Competitive Grants Program, via the ARC Data Portal JSON:API."""
 import json
 import logging
+import re
 from pathlib import Path
 
 from etl.harvest import fetch
@@ -35,13 +36,18 @@ def _name(p):
     return " ".join(x for x in parts if x) or None
 
 
+# 'Prof Jane Smith; Dr John Doe' or 'Prof Jane Smith, Dr John Doe': split before each title.
+_SPLIT = re.compile(r"\s*;\s*|\s*,\s*(?=(?:Emeritus |Associate |Assoc |Adjunct |Scientia )?"
+                    r"(?:Prof|Professor|A/Prof|Dr|Mr|Mrs|Ms|Miss|Mx|Sir|Dame)\b)")
+
+
 def team(a):
     """[(name, role)] from whichever investigator list the record carries."""
     out = []
     for key in TEAM_KEYS:
         v = a.get(key)
         if isinstance(v, str):
-            v = [x for x in v.replace(",", ";").split(";") if x.strip()] if ";" in v else [v]
+            v = [x for x in _SPLIT.split(v) if x and x.strip()]
         for p in v or []:
             role = (pick(p, "role", "role-code", "roleCode", "role-name") if isinstance(p, dict) else None) or "CI"
             n = _name(p)
@@ -50,6 +56,14 @@ def team(a):
         if out:
             break
     return out
+
+
+def split_summary(text):
+    """ARC grant-summary is 'Title . Summary'; returns (title, summary)."""
+    if not text:
+        return None, None
+    m = re.match(r"\s*(.{3,300}?)\s+\.\s+(.*)", text, re.S)
+    return (m.group(1).strip(), m.group(2).strip()) if m else (None, text)
 
 
 def parse_grant(item):
@@ -69,6 +83,7 @@ def parse_grant(item):
     if isinstance(for_raw, dict):
         for_raw = pick(for_raw, "code", "name")
     for_code, division = for_parts(for_raw)
+    title, summary = split_summary(pick(a, "grant-summary"))
     lead = pick(a, "lead-investigator")
     if isinstance(lead, dict):
         lead = pick(lead, "name", "full-name")
@@ -77,8 +92,8 @@ def parse_grant(item):
         "source": "ARC",
         "scheme": scheme,
         "round_year": year,
-        "title": pick(a, "grant-title", "project-title", "title"),
-        "summary": pick(a, "grant-summary", "national-interest-test-statement"),
+        "title": pick(a, "grant-title", "project-title", "title") or title,
+        "summary": summary or pick(a, "national-interest-test-statement"),
         "org_raw": org,
         "state_raw": None,
         "lead_investigator": lead,
@@ -87,7 +102,8 @@ def parse_grant(item):
         "for_division": division,
         "research_area": None,
         "field_group": field_group(division),
-        "basic_science": int(arc_is_discovery(code, scheme)),
+        "basic_science": int((scheme_info.get("program") or "").strip().lower() == "discovery"
+                             or arc_is_discovery(code, scheme)),
         "investigators": team(a),
     }
 
@@ -101,6 +117,12 @@ def load(samples_dir=None):
             first = doc["data"][0]
             log.info("ARC attribute keys: %s", sorted(first.get("attributes", {})))
             log.info("ARC first record: %s", json.dumps(first)[:3000])
+        if not getattr(load, "_team_logged", False):
+            ex = next((d for d in doc.get("data", []) if (d.get("attributes") or {}).get("investigators")), None)
+            if ex:
+                load._team_logged = True
+                log.info("ARC investigators example %s: %r -> %s", ex.get("id"), ex["attributes"]["investigators"],
+                         team(ex["attributes"]))
         if samples_dir and page == 1:
             Path(samples_dir, "arc_page1.json").write_text(
                 json.dumps({**doc, "data": doc.get("data", [])[:3]}, indent=2))

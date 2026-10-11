@@ -214,3 +214,12 @@ def test_summary_shards(offline):
     assert shard["ARC:DP200100001"] == "Quantum materials."
     import hashlib
     assert run.shard("ARC:DP200100001") == hashlib.sha1(b"ARC:DP200100001").hexdigest()[:2]
+
+
+def test_arc_title_and_team():
+    g = arc.parse_grant({"id": "DP1", "attributes": {
+        "scheme-name": "Discovery Projects", "scheme-information": {"program": "Discovery"},
+        "grant-summary": "Evolution of spiders . This project will study webs.",
+        "lead-investigator": "Prof Jane Smith", "investigators": "Prof Jane Smith, Dr John Doe"}})
+    assert (g["title"], g["summary"], g["basic_science"]) == ("Evolution of spiders", "This project will study webs.", 1)
+    assert g["investigators"] == [("Prof Jane Smith", "CI"), ("Dr John Doe", "CI")]
