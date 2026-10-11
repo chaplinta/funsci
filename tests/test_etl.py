@@ -178,3 +178,30 @@ def test_rbg_long_format():
         [3040, "Curtin University", 2010, "WA", "ATN", "JRE", 5000000]])})
     df = next(harvest.read_tables(content, education.RBG_SYN, ["org"], "x.xlsx"))[1]
     assert list(education._long(df, [], None)) == [("Curtin University", 2010, "JRE", 5000000.0)]
+
+
+def test_topics():
+    from etl.normalise import classify_topics
+    assert classify_topics("110903", "Synaptic plasticity") == [("Neuroscience", "for")]
+    t = dict(classify_topics("0601", "Phylogenomics of spiders"))
+    assert t["Cell & molecular biology"] == "for" and t["Evolution"] == "keyword"
+    assert classify_topics(None, "Kidney transplant outcomes") == []
+    assert classify_topics("170113", "Social psychology of crowds") == []
+
+
+def test_person_key():
+    from etl.normalise import clean_person, person_key
+    same = ["Prof Jane A Smith", "Smith, Jane", "SMITH Jane", "Associate Professor Jane Smith"]
+    assert {person_key(n) for n in same} == {"smith|j"}
+    assert person_key("Dr Kate Smith") != person_key("Prof Jane Smith")
+    assert clean_person("A/Prof Ryan Lister") == "Ryan Lister"
+
+
+def test_links_built(offline):
+    db = run.build(offline / "build")
+    c = sqlite3.connect(db)
+    topics = dict(c.execute("SELECT topic, method FROM grant_topics WHERE grant_id='ARC:DP200100001'"))
+    assert topics == {}  # 0206 quantum physics: no biology topic
+    lead = c.execute("SELECT name, name_key, role FROM investigators WHERE grant_id='ARC:DP200100001'").fetchall()
+    assert lead == [("Jane Smith", "smith|j", "lead")]
+    assert c.execute("SELECT count(*) FROM investigators WHERE grant_id LIKE 'NHMRC:%'").fetchone()[0] == 2

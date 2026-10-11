@@ -20,6 +20,38 @@ def pick(d, *keys):
     return None
 
 
+TEAM_KEYS = ("investigators", "investigators-at-announcement", "current-investigators",
+             "chief-investigators", "investigator-list", "participants")
+
+
+def _name(p):
+    if isinstance(p, str):
+        return p
+    full = pick(p, "name", "full-name", "fullName", "display-name")
+    if full:
+        return full
+    parts = [pick(p, k1, k2) for k1, k2 in (("title", "title"), ("first-name", "firstName"),
+                                             ("family-name", "familyName"))]
+    return " ".join(x for x in parts if x) or None
+
+
+def team(a):
+    """[(name, role)] from whichever investigator list the record carries."""
+    out = []
+    for key in TEAM_KEYS:
+        v = a.get(key)
+        if isinstance(v, str):
+            v = [x for x in v.replace(",", ";").split(";") if x.strip()] if ";" in v else [v]
+        for p in v or []:
+            role = (pick(p, "role", "role-code", "roleCode", "role-name") if isinstance(p, dict) else None) or "CI"
+            n = _name(p)
+            if n:
+                out.append((n.strip(), str(role)))
+        if out:
+            break
+    return out
+
+
 def parse_grant(item):
     a = item.get("attributes", {})
     code = item.get("id") or a.get("code")
@@ -56,6 +88,7 @@ def parse_grant(item):
         "research_area": None,
         "field_group": field_group(division),
         "basic_science": int(arc_is_discovery(code, scheme)),
+        "investigators": team(a),
     }
 
 
@@ -64,6 +97,10 @@ def load(samples_dir=None):
     rows, page = [], 1
     while url:
         doc = json.loads(fetch(url, use_cache=False))
+        if page == 1 and doc.get("data"):
+            first = doc["data"][0]
+            log.info("ARC attribute keys: %s", sorted(first.get("attributes", {})))
+            log.info("ARC first record: %s", json.dumps(first)[:3000])
         if samples_dir and page == 1:
             Path(samples_dir, "arc_page1.json").write_text(
                 json.dumps({**doc, "data": doc.get("data", [])[:3]}, indent=2))

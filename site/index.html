@@ -15,6 +15,8 @@
     <nav id="tabs" role="tablist">
       <button data-tab="overview" class="on">Overview</button>
       <button data-tab="wa">WA basic science</button>
+      <button data-tab="bio">Biology topics</button>
+      <button data-tab="people">Researchers</button>
       <button data-tab="inst">Institutions</button>
       <button data-tab="search">Grant search</button>
       <button data-tab="other">Philanthropy &amp; WA Govt</button>
@@ -32,6 +34,8 @@
     <label>To <select id="f-to"></select></label>
     <fieldset id="f-sources"><legend>Funders</legend></fieldset>
     <label>Field <select id="f-field"><option value="">All fields</option></select></label>
+    <label id="f-topic-wrap">Topic <select id="f-topic"><option value="">All topics</option></select></label>
+    <label class="chk" id="f-kw-wrap"><input type="checkbox" id="f-kw" checked> Include keyword matches</label>
     <label class="chk"><input type="checkbox" id="f-basic"> Basic / discovery only</label>
   </section>
 
@@ -59,6 +63,40 @@
     <figure class="card"><figcaption>HERDC research income by category (A$m)</figcaption><div id="inst-herdc"></div></figure>
     <figure class="card"><figcaption>Top schemes (selected years)</figcaption><div class="tbl" id="inst-schemes"></div></figure>
     <figure class="card"><figcaption>Philanthropy and WA Government funding recorded for this institution</figcaption><div class="tbl" id="inst-phil"></div></figure>
+  </section>
+
+  <section data-panel="bio" class="panel" hidden>
+    <p class="note">Topics come from each grant's Field of Research code, plus keyword matches in titles and summaries (untick "Include keyword matches" for FoR codes only). A grant can sit in several topics, so topics don't add up to the total. See Data &amp; methods for the rules.</p>
+    <div class="row">
+      <label>Topic <select id="bio-topic"></select></label>
+      <label>State <select id="bio-state"></select></label>
+    </div>
+    <div class="tiles" id="bio-tiles"></div>
+    <figure class="card"><figcaption>Funding by topic and year, Australia-wide (A$m)</figcaption><div id="bio-heat"></div></figure>
+    <figure class="card"><figcaption id="bio-share-cap">State share of each topic (bars) against population share (tick)</figcaption><div id="bio-share"></div></figure>
+    <figure class="card"><figcaption id="bio-trend-cap">Selected topic by year and funder (A$m)</figcaption><div id="bio-trend"></div></figure>
+    <figure class="card"><figcaption>Selected topic: A$ per resident by state (selected years)</figcaption><div id="bio-percap"></div></figure>
+    <figure class="card"><figcaption id="bio-inst-cap">Top institutions in the selected topic and state (A$m)</figcaption><div id="bio-inst"></div></figure>
+    <figure class="card"><figcaption id="bio-people-cap">Top researchers in the selected topic and state</figcaption><div class="tbl" id="bio-people"></div></figure>
+    <figure class="card"><figcaption>Largest grants in the selected topic and state</figcaption><div class="tbl" id="bio-grants"></div></figure>
+  </section>
+
+  <section data-panel="people" class="panel" hidden>
+    <p class="note">Researchers are matched by surname and first initial across all funders. Two people with the same surname and initial will be merged; a name change splits one person in two. Each grant's full amount is credited to every named investigator. NHMRC, MRFF and CRC name only the lead (CIA or lead partner).</p>
+    <div class="row">
+      <label class="grow">Find a researcher <input id="p-q" type="search" placeholder="e.g. Smith or Jane Smith"></label>
+      <label>State of grant <select id="p-state"><option value="">All</option></select></label>
+      <label>Role <select id="p-role"><option value="">Any named investigator</option><option value="lead">Lead only</option></select></label>
+    </div>
+    <div id="p-profile" hidden>
+      <div class="row"><h2 id="p-name" class="pname"></h2><button id="p-back" class="btn">Back to list</button><button id="p-csv" class="btn">Download grants CSV</button></div>
+      <div class="tiles" id="p-tiles"></div>
+      <figure class="card"><figcaption>Grants by year and funder (A$m)</figcaption><div id="p-year"></div></figure>
+      <figure class="card"><figcaption>Topics (A$m, a grant can count in several)</figcaption><div id="p-topics"></div></figure>
+      <figure class="card"><figcaption>Co-investigators</figcaption><div class="tbl" id="p-coi"></div></figure>
+      <figure class="card"><figcaption>Grants</figcaption><p class="note" id="p-grants-note"></p><div class="tbl" id="p-grants"></div></figure>
+    </div>
+    <figure class="card" id="p-board-card"><figcaption id="p-board-cap">Most funded researchers</figcaption><div class="tbl" id="p-board"></div></figure>
   </section>
 
   <section data-panel="search" class="panel" hidden>
@@ -103,6 +141,8 @@ GROUP BY 1, 2 ORDER BY aud_m DESC LIMIT 20;</textarea>
         <li><b>Basic science</b>: ARC Discovery program schemes (DP, DE, FT, FL, IN) and NHMRC grants classed in the Basic Science broad research area. MRFF (mission-directed) and CRC / CRC-P (industry-led) are not counted as basic.</li>
         <li><b>CRC</b> rows are Commonwealth grant funding to Cooperative Research Centres and CRC Projects, credited to the lead organisation. Participant cash and in-kind contributions are not included.</li>
         <li><b>Field</b> is derived from the primary Field of Research (FoR) division, 2008 or 2020 codes. Natural sciences: 01–07, 30, 31, 34, 37, 41, 49, 51. Engineering &amp; IT: 08–10, 40, 46. Health &amp; medical: 11, 32, 42. NHMRC and MRFF grants without a FoR code are classed Health &amp; medical.</li>
+        <li><b>Biology topics</b> come from the grant's primary FoR code (2008 and 2020 codes), plus keyword matches in the title and, where published, the summary, keywords or description. Neuroscience: 1109, 3209, 5202, 170101, 170112, 170205. Evolution: 0603, 3104. Ecology: 0602, 3103. Genetics &amp; genomics: 0604, 3105, 1103. Cell &amp; molecular: 0601, 3101, 1101, 3205. Microbiology: 0605, 3107, 1108. Plant biology: 0607, 3108. Zoology: 0608, 3109. Physiology: 0606, 1116, 3208. Immunology: 1107, 3204. Bioinformatics: 3102 and related. Structural biology &amp; biophysics: keywords only. Keyword lists are in <code>etl/normalise.py</code>. Keyword matching catches grants filed under another FoR (e.g. an evolution project coded as genetics) but also some clinical grants (e.g. "brain cancer" under neuroscience).</li>
+        <li><b>Researchers</b> are matched on surname plus first initial after stripping titles. ARC grants list every chief investigator where the ARC API provides them; NHMRC, MRFF and CRC list the lead only. Grant amounts are credited in full to each named investigator, so researcher totals overlap.</li>
         <li><b>Per capita</b> uses ABS estimated resident population, June 2024, for every year. Treat as indicative.</li>
         <li><b>Organisation names</b> are matched to canonical names via an alias table (<code>data/manual/organisations.csv</code>). ARC reports the current administering organisation only.</li>
         <li><b>Block grants and HERDC income</b> come from Department of Education spreadsheets, whose layouts change between years. Check the source status above for gaps.</li>

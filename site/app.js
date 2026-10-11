@@ -24,7 +24,12 @@ const FOR_NAMES = {
   "50": "Philosophy & Religion", "51": "Physical Sciences", "52": "Psychology",
 };
 
+const TOPICS = ["Neuroscience", "Evolution", "Ecology", "Genetics & genomics", "Cell & molecular biology",
+  "Microbiology", "Plant biology", "Zoology & animal biology", "Physiology", "Immunology",
+  "Bioinformatics & computational biology", "Structural biology & biophysics"];
+
 let db;
+let personKey = null;  // researcher shown on the Researchers tab
 const $ = (s) => document.querySelector(s);
 const fmtM = (v) => v == null ? "–" : `$${d3.format(",.1f")(v / 1e6)}m`;
 const fmtB = (v) => v >= 1e9 ? `$${d3.format(",.2f")(v / 1e9)}b` : fmtM(v);
@@ -51,16 +56,26 @@ function filters() {
     from: +$("#f-from").value, to: +$("#f-to").value,
     sources: [...document.querySelectorAll("#f-sources input:checked")].map((i) => i.value),
     field: $("#f-field").value, basic: $("#f-basic").checked,
+    topic: $("#f-topic").value, kw: $("#f-kw").checked,
   };
 }
 
-// WHERE fragment over grants aliased g. opts.basic overrides the checkbox.
+// Grant g carries topic (FoR-coded only unless keyword matches are on).
+function topicClause(topic, kw = filters().kw) {
+  return [`EXISTS (SELECT 1 FROM grant_topics t WHERE t.grant_id = g.id AND t.topic = ?${kw ? "" : " AND t.method = 'for'"})`, topic];
+}
+const methodSQL = () => (filters().kw ? "" : " AND t.method = 'for'");
+
+// WHERE fragment over grants aliased g. opts.basic / opts.topic override the filter bar
+// (opts.topic = null ignores the topic filter).
 function where(extra = [], opts = {}) {
   const f = filters();
   const parts = ["g.round_year BETWEEN ? AND ?"], p = [f.from, f.to];
   parts.push(`g.source IN (${f.sources.map(() => "?").join(",") || "''"})`); p.push(...f.sources);
   if (f.field) { parts.push("g.field_group = ?"); p.push(f.field); }
   if (opts.basic ?? f.basic) parts.push("g.basic_science = 1");
+  const topic = "topic" in opts ? opts.topic : f.topic;
+  if (topic) { const [sql, v] = topicClause(topic, f.kw); parts.push(sql); p.push(v); }
   for (const [sql, ...vals] of extra) { parts.push(sql); p.push(...vals); }
   return [parts.join(" AND "), p];
 }
@@ -127,6 +142,34 @@ function downloadCSV(name, rows) {
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+const orgList = (s) => {
+  const xs = (s || "").split(",").filter(Boolean);
+  return esc(xs.slice(0, 3).join("; ")) + (xs.length > 3 ? ` <span class="note">+${xs.length - 3} more</span>` : "");
+};
+const who = (key, name) => key ? `<a class="who" data-key="${esc(key)}">${esc(name)}</a>` : esc(name);
+
+// One row per (grant, person); role filter optional. Avoids double counting lead + CI rows.
+const peopleSQL = (role) => `(SELECT grant_id, name_key, MAX(name) name, MIN(role) role FROM investigators
+  ${role ? "WHERE role = 'lead'" : ""} GROUP BY grant_id, name_key)`;
+
+function stackedYears(sel, rows, height = 280) {
+  if (!rows.length) return empty(sel);
+  plotInto(sel, {
+    height, x: yearX(), y: { label: "A$m", grid: true }, color: colorScale(),
+    marks: [Plot.barY(rows, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
+  });
+}
+
+function stackedOrgs(sel, rows, n = 15) {
+  if (!rows.length) return empty(sel);
+  const order = d3.groupSort(rows, (v) => -d3.sum(v, (d) => d.m), (d) => d.org).slice(0, n);
+  plotInto(sel, {
+    height: 40 + order.length * 26, ...catY(order, 260), x: { label: "A$m", grid: true }, color: colorScale(),
+    marks: [Plot.barX(rows.filter((d) => order.includes(d.org)), { y: "org", x: "m", fill: "source", rx: 2, inset: 1,
+      tip: { format: { m: ",.1f" } } }), Plot.ruleX([0])],
+  });
 }
 
 const yearsLabel = () => { const f = filters(); return `${f.from}–${f.to}`; };
@@ -365,6 +408,151 @@ const views = {
     ]);
   },
 
+  bio() {
+    const topic = $("#bio-topic").value, st = $("#bio-state").value, ms = methodSQL();
+    const [w, p] = where([], { topic: null });
+    const [wt, pt] = where([topicClause(topic)], { topic: null });
+    $("#bio-share-cap").textContent = `${st} share of national funding in each topic (bars) against ${st} share of population (dashed line)`;
+    $("#bio-trend-cap").textContent = `${topic} in ${st}, by year and funder (A$m)`;
+    $("#bio-inst-cap").textContent = `Top ${st} institutions in ${topic} (A$m, selected years)`;
+    $("#bio-people-cap").textContent = `Top ${st} researchers in ${topic} (selected years)`;
+
+    const nat = q(`SELECT COUNT(*) n, SUM(amount_aud) s, SUM(CASE WHEN state=? THEN amount_aud END) st,
+                   SUM(CASE WHEN state=? THEN 1 ELSE 0 END) stn FROM grants g WHERE ${wt}`, [st, st, ...pt])[0];
+    const byState = q(`SELECT state, SUM(amount_aud) s FROM grants g WHERE ${wt} AND state IS NOT NULL GROUP BY 1`, pt)
+      .filter((d) => POP[d.state]).map((d) => ({ ...d, percap: d.s / POP[d.state] }));
+    const rank = d3.sort(byState, (d) => -d.percap).findIndex((d) => d.state === st) + 1;
+    tiles("#bio-tiles", [
+      [`${topic} grants in ${st}`, fmtInt(nat.stn || 0), yearsLabel()],
+      ["Amount", fmtB(nat.st || 0), `of ${fmtB(nat.s || 0)} nationally`],
+      [`${st} share`, nat.s ? fmtPct((nat.st || 0) / nat.s) : "–", `population share ${fmtPct(POP[st] / POP_TOTAL)}`],
+      ["Per resident", d3.format("$,.2f")((nat.st || 0) / POP[st]), rank ? `rank ${rank} of ${byState.length} states` : ""],
+    ]);
+
+    const heat = q(`SELECT t.topic, g.round_year year, SUM(g.amount_aud)/1e6 m, COUNT(*) n FROM grants g
+                    JOIN grant_topics t ON t.grant_id = g.id${ms} WHERE ${w} GROUP BY 1, 2`, p);
+    if (!heat.length) empty("#bio-heat");
+    else plotInto("#bio-heat", {
+      height: 60 + TOPICS.length * 28, ...catY(TOPICS, 250), x: yearX({ axis: "top" }),
+      color: { type: "sqrt", scheme: "blues", legend: true, label: "A$m" },
+      marks: [Plot.cell(heat, { x: "year", y: "topic", fill: "m", inset: 0.5, tip: { format: { m: ",.1f", n: true } },
+        channels: { n: { value: "n", label: "grants" } } })],
+    });
+
+    const share = q(`SELECT t.topic, SUM(g.amount_aud) s, SUM(CASE WHEN g.state=? THEN g.amount_aud ELSE 0 END) st
+                     FROM grants g JOIN grant_topics t ON t.grant_id = g.id${ms} WHERE ${w} GROUP BY 1`, [st, ...p])
+      .map((d) => ({ ...d, share: d.s ? d.st / d.s : 0 }));
+    if (!share.length) empty("#bio-share");
+    else plotInto("#bio-share", {
+      height: 60 + TOPICS.length * 26, ...catY(TOPICS, 250), x: { label: `${st} share of national`, tickFormat: "%", grid: true },
+      marks: [
+        Plot.barX(share, { y: "topic", x: "share", rx: 2, tip: { format: { share: ".1%", fill: false } },
+          fill: (d) => d.topic === topic ? css("--accent") : css("--muted-mark") }),
+        Plot.ruleX([POP[st] / POP_TOTAL], { stroke: css("--ink"), strokeDasharray: "4 3" }),
+        Plot.ruleX([0]),
+      ],
+    });
+
+    stackedYears("#bio-trend", q(`SELECT round_year year, source, SUM(amount_aud)/1e6 m FROM grants g
+                                  WHERE ${wt} AND g.state = ? GROUP BY 1, 2`, [...pt, st]));
+
+    if (!byState.length) empty("#bio-percap");
+    else plotInto("#bio-percap", {
+      height: 260, marginLeft: 44, x: { label: "A$ per resident", grid: true },
+      y: { label: null, domain: d3.sort(byState, (d) => -d.percap).map((d) => d.state) },
+      marks: [Plot.barX(byState, { y: "state", x: "percap", rx: 2, tip: { format: { percap: ",.2f", fill: false } },
+        fill: (d) => d.state === st ? css("--accent") : css("--muted-mark") }), Plot.ruleX([0])],
+    });
+
+    stackedOrgs("#bio-inst", q(`SELECT o.name org, g.source, SUM(amount_aud)/1e6 m FROM grants g
+                                JOIN organisations o ON o.id = g.org_id WHERE ${wt} AND g.state = ? GROUP BY 1, 2`, [...pt, st]));
+
+    table("#bio-people", q(`SELECT i.name_key k, MAX(i.name) name, COUNT(*) n, SUM(g.amount_aud) s,
+                            MIN(g.round_year) y0, MAX(g.round_year) y1, GROUP_CONCAT(DISTINCT COALESCE(o.name, g.org_raw)) orgs
+                            FROM ${peopleSQL()} i JOIN grants g ON g.id = i.grant_id LEFT JOIN organisations o ON o.id = g.org_id
+                            WHERE ${wt} AND g.state = ? GROUP BY 1 ORDER BY s DESC LIMIT 25`, [...pt, st]), [
+      { label: "Researcher", f: (r) => who(r.k, r.name) }, { label: "Grants", n: 1, f: (r) => fmtInt(r.n) },
+      { label: "Total", n: 1, f: (r) => fmtM(r.s) }, { label: "Years", n: 1, f: (r) => `${r.y0}–${r.y1}` },
+      { label: "Organisations", f: (r) => orgList(r.orgs) },
+    ]);
+
+    table("#bio-grants", q(`SELECT g.round_year year, g.source, g.scheme, g.title, g.lead_investigator lead,
+                            (SELECT name_key FROM investigators WHERE grant_id = g.id AND role = 'lead') k,
+                            COALESCE(o.name, g.org_raw) org, g.amount_aud
+                            FROM grants g LEFT JOIN organisations o ON o.id = g.org_id
+                            WHERE ${wt} AND g.state = ? ORDER BY g.amount_aud DESC LIMIT 25`, [...pt, st]), [
+      { key: "year", label: "Year" }, { key: "scheme", label: "Scheme" }, { key: "title", label: "Title" },
+      { label: "Lead", f: (r) => who(r.k, r.lead) }, { key: "org", label: "Organisation" },
+      { label: "Amount", n: 1, f: (r) => fmtM(r.amount_aud) },
+    ]);
+  },
+
+  people() {
+    $("#p-profile").hidden = !personKey;
+    $("#p-board-card").hidden = !!personKey;
+    if (personKey) return views.profile(personKey);
+    const extra = [];
+    const st = $("#p-state").value, role = $("#p-role").value, s = $("#p-q").value.trim();
+    if (st) extra.push(["g.state = ?", st]);
+    if (s) extra.push(["(i.name LIKE ? OR i.name_key LIKE ?)", `%${s}%`, `%${s.toLowerCase()}%`]);
+    const [w, p] = where(extra);
+    const f = filters();
+    $("#p-board-cap").textContent = `Most funded researchers${st ? ` on ${st} grants` : ""}${f.topic ? ` in ${f.topic}` : ""}, ${yearsLabel()}` +
+      `${role ? " (lead only)" : ""}. Click a name for their profile.`;
+    table("#p-board", q(`SELECT i.name_key k, MAX(i.name) name, COUNT(*) n, SUM(g.amount_aud) s,
+                         SUM(CASE WHEN i.role = 'lead' THEN 1 ELSE 0 END) led, MIN(g.round_year) y0, MAX(g.round_year) y1,
+                         GROUP_CONCAT(DISTINCT g.source) funders, GROUP_CONCAT(DISTINCT COALESCE(o.name, g.org_raw)) orgs
+                         FROM ${peopleSQL(role)} i JOIN grants g ON g.id = i.grant_id LEFT JOIN organisations o ON o.id = g.org_id
+                         WHERE ${w} GROUP BY 1 ORDER BY s DESC LIMIT 100`, p), [
+      { label: "Researcher", f: (r) => who(r.k, r.name) }, { label: "Grants", n: 1, f: (r) => fmtInt(r.n) },
+      { label: "As lead", n: 1, f: (r) => fmtInt(r.led) }, { label: "Total", n: 1, f: (r) => fmtM(r.s) },
+      { label: "Years", n: 1, f: (r) => `${r.y0}–${r.y1}` }, { label: "Funders", f: (r) => esc((r.funders || "").split(",").join(", ")) }, { label: "Organisations", f: (r) => orgList(r.orgs) },
+    ]);
+  },
+
+  profile(key, csv) {
+    const [w, p] = where([["i.name_key = ?", key]]);
+    const grants = q(`SELECT g.id, g.round_year year, g.source, g.scheme, g.title, i.role, g.lead_investigator lead,
+                      COALESCE(o.name, g.org_raw) org, g.state, g.amount_aud, g.basic_science basic
+                      FROM ${peopleSQL()} i JOIN grants g ON g.id = i.grant_id LEFT JOIN organisations o ON o.id = g.org_id
+                      WHERE ${w} ORDER BY g.round_year DESC, g.amount_aud DESC`, p);
+    if (csv) return grants;
+    const name = q("SELECT name, COUNT(*) c FROM investigators WHERE name_key = ? GROUP BY 1 ORDER BY c DESC LIMIT 1", [key])[0];
+    $("#p-name").textContent = name ? name.name : key;
+    const orgs = [...new Set(grants.map((g) => g.org).filter(Boolean))];
+    const yrs = grants.map((g) => g.year).filter(Boolean);
+    tiles("#p-tiles", [
+      ["Grants", fmtInt(grants.length), `${grants.filter((g) => g.role === "lead").length} as lead`],
+      ["Total awarded", fmtB(d3.sum(grants, (g) => g.amount_aud)), "full grant value, shared with co-investigators"],
+      ["Active", yrs.length ? `${d3.min(yrs)}–${d3.max(yrs)}` : "–", "within selected years and funders"],
+      ["Organisations", fmtInt(orgs.length), orgs.slice(0, 2).join("; ") + (orgs.length > 2 ? "…" : "")],
+    ]);
+    stackedYears("#p-year", d3.rollups(grants, (v) => d3.sum(v, (g) => g.amount_aud) / 1e6, (g) => g.year, (g) => g.source)
+      .flatMap(([year, xs]) => xs.map(([source, m]) => ({ year, source, m }))), 240);
+
+    const ms = methodSQL();
+    const tops = q(`SELECT t.topic, SUM(g.amount_aud)/1e6 m, COUNT(*) n FROM ${peopleSQL()} i JOIN grants g ON g.id = i.grant_id
+                    JOIN grant_topics t ON t.grant_id = g.id${ms} WHERE ${w} GROUP BY 1 ORDER BY m DESC`, p);
+    if (!tops.length) empty("#p-topics", "No biology topics tagged on these grants.");
+    else plotInto("#p-topics", {
+      height: 40 + tops.length * 26, ...catY(tops.map((d) => d.topic), 250), x: { label: "A$m", grid: true },
+      marks: [Plot.barX(tops, { y: "topic", x: "m", fill: css("--accent"), rx: 2, tip: { format: { m: ",.2f" } } }), Plot.ruleX([0])],
+    });
+
+    table("#p-coi", q(`SELECT j.name_key k, MAX(j.name) name, COUNT(DISTINCT g.id) n, SUM(g.amount_aud) s
+                       FROM ${peopleSQL()} i JOIN ${peopleSQL()} j ON j.grant_id = i.grant_id AND j.name_key <> i.name_key
+                       JOIN grants g ON g.id = i.grant_id WHERE ${w} GROUP BY 1 ORDER BY n DESC, s DESC LIMIT 30`, p), [
+      { label: "Co-investigator", f: (r) => who(r.k, r.name) }, { label: "Shared grants", n: 1, f: (r) => fmtInt(r.n) },
+      { label: "Value of shared grants", n: 1, f: (r) => fmtM(r.s) },
+    ]);
+    $("#p-grants-note").textContent = grants.length > 200 ? `Showing the latest 200 of ${fmtInt(grants.length)}; the CSV has all.` : "";
+    table("#p-grants", grants.slice(0, 200), [
+      { key: "year", label: "Year" }, { key: "source", label: "Funder" }, { key: "scheme", label: "Scheme" },
+      { key: "title", label: "Title" }, { key: "role", label: "Role" }, { key: "org", label: "Organisation" },
+      { label: "Amount", n: 1, f: (r) => fmtM(r.amount_aud) }, { label: "Basic", f: (r) => r.basic ? "yes" : "" },
+    ]);
+  },
+
   sql() {},
 
   about() {
@@ -380,7 +568,7 @@ const views = {
 
 /* ---------- wiring ---------- */
 let current = "overview";
-const FILTER_TABS = new Set(["overview", "wa", "inst", "search"]);
+const FILTER_TABS = new Set(["overview", "wa", "bio", "people", "inst", "search"]);
 
 function show(tab) {
   current = tab;
@@ -388,6 +576,7 @@ function show(tab) {
   document.querySelectorAll("[data-panel]").forEach((s) => { s.hidden = s.dataset.panel !== tab; });
   $("#filters").hidden = !FILTER_TABS.has(tab);
   $("#f-basic").parentElement.hidden = tab === "wa";
+  $("#f-topic-wrap").hidden = tab === "bio";
   history.replaceState(null, "", `#${tab}`);
   render();
 }
@@ -433,7 +622,14 @@ async function init() {
     $("#f-sources").append(l);
   });
   for (const r of q("SELECT DISTINCT field_group f FROM grants WHERE f IS NOT NULL ORDER BY 1")) $("#f-field").add(new Option(r.f, r.f));
-  STATES.forEach((s) => $("#s-state").add(new Option(s, s)));
+  STATES.forEach((s) => {
+    $("#s-state").add(new Option(s, s)); $("#bio-state").add(new Option(s, s)); $("#p-state").add(new Option(s, s));
+  });
+  const present_topics = new Set(q("SELECT DISTINCT topic FROM grant_topics").map((r) => r.topic));
+  TOPICS.filter((t) => present_topics.has(t)).forEach((t) => {
+    $("#f-topic").add(new Option(t, t)); $("#bio-topic").add(new Option(t, t));
+  });
+  $("#bio-state").value = "WA";
 
   const orgs = q(`SELECT o.id, o.name, o.state, COALESCE(SUM(g.amount_aud),0) s FROM organisations o
                   LEFT JOIN grants g ON g.org_id=o.id GROUP BY o.id
@@ -444,9 +640,20 @@ async function init() {
   const meta = await fetch("data/meta.json").then((r) => r.ok ? r.json() : {}).catch(() => ({}));
   $("#ab-built").textContent = meta.built ? new Date(meta.built).toLocaleString("en-AU") : "unknown";
 
+  let timer;
   document.querySelectorAll("#filters select, #filters input").forEach((el) => el.addEventListener("change", render));
   $("#inst-pick").addEventListener("change", render);
-  let timer;
+  ["#bio-topic", "#bio-state", "#p-state", "#p-role"].forEach((s) => $(s).addEventListener("change", render));
+  $("#p-q").addEventListener("input", () => { personKey = null; clearTimeout(timer); timer = setTimeout(render, 250); });
+  $("#p-back").addEventListener("click", () => { personKey = null; render(); });
+  $("#p-csv").addEventListener("click", () => personKey && downloadCSV(`${personKey.replace("|", "_")}.csv`, views.profile(personKey, true)));
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a.who");
+    if (!a) return;
+    e.preventDefault();
+    personKey = a.dataset.key;
+    if (current === "people") { render(); window.scrollTo(0, 0); } else { show("people"); window.scrollTo(0, 0); }
+  });
   ["#s-q", "#s-org", "#s-state"].forEach((s) => $(s).addEventListener("input", () => {
     clearTimeout(timer); timer = setTimeout(render, 250);
   }));

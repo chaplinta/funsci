@@ -73,3 +73,22 @@ CREATE TABLE IF NOT EXISTS sources (
   status TEXT,                        -- ok | failed | cached
   note TEXT
 );
+
+-- Biology topics per grant (several allowed). method: for (FoR code) | keyword (title/summary)
+CREATE TABLE IF NOT EXISTS grant_topics (
+  grant_id TEXT REFERENCES grants(id),
+  topic TEXT,
+  method TEXT,
+  PRIMARY KEY (grant_id, topic)
+);
+CREATE INDEX IF NOT EXISTS grant_topics_topic ON grant_topics(topic);
+
+-- People named on grants. name_key = family|first-initial, so matching is by name only.
+CREATE TABLE IF NOT EXISTS investigators (
+  grant_id TEXT REFERENCES grants(id),
+  name TEXT,
+  name_key TEXT,
+  role TEXT,                          -- lead | CI | PI ...
+  PRIMARY KEY (grant_id, name_key, role)
+);
+CREATE INDEX IF NOT EXISTS investigators_key ON investigators(name_key);

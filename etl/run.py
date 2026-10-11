@@ -17,7 +17,7 @@ import sqlite3
 from pathlib import Path
 
 from etl import harvest
-from etl.normalise import OrgIndex
+from etl.normalise import OrgIndex, classify_topics, clean_person, person_key
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ["arc", "nhmrc", "mrff", "crc", "education", "manual"]
@@ -35,6 +35,7 @@ def insert(conn, orgs, data):
         g = {**g, "org_id": oid, "state": state}
         conn.execute(f"INSERT OR REPLACE INTO grants({','.join(GRANT_COLS)}) "
                      f"VALUES ({','.join('?' * len(GRANT_COLS))})", [g.get(c) for c in GRANT_COLS])
+        insert_links(conn, g)
         n += 1
     for org, year, program, amt in data.get("block_grants", []):
         oid, _ = orgs.match(org)
@@ -59,6 +60,23 @@ def insert(conn, orgs, data):
     return n
 
 
+def insert_links(conn, g):
+    """Topic tags and investigator rows for one grant."""
+    gid = g["id"]
+    conn.execute("DELETE FROM grant_topics WHERE grant_id=?", (gid,))
+    conn.execute("DELETE FROM investigators WHERE grant_id=?", (gid,))
+    for topic, method in classify_topics(g.get("for_code"), g.get("title"), g.get("summary")):
+        conn.execute("INSERT INTO grant_topics VALUES (?,?,?)", (gid, topic, method))
+    people = g.get("investigators") or []
+    if g.get("lead_investigator") and not any(r == "lead" for _, r in people):
+        people = [(g["lead_investigator"], "lead")] + list(people)
+    for raw, role in people:
+        key = person_key(raw)
+        if key:
+            conn.execute("INSERT OR IGNORE INTO investigators VALUES (?,?,?,?)",
+                         (gid, clean_person(raw), key, role))
+
+
 def carry_over(conn, orgs, prev, name):
     """Re-load a failed source's rows from the previous database."""
     old = sqlite3.connect(prev)
@@ -70,6 +88,15 @@ def carry_over(conn, orgs, prev, name):
         rows = old.execute(f"SELECT {','.join(cols)}, state AS state_raw FROM grants t "
                            "WHERE source=?", (name,)).fetchall()
         data["grants"] = [dict(r) for r in rows]
+        team = {}
+        try:
+            for gid, nm, role in old.execute("SELECT i.grant_id, i.name, i.role FROM investigators i "
+                                             "JOIN grants g ON g.id=i.grant_id WHERE g.source=?", (name,)):
+                team.setdefault(gid, []).append((nm, role))
+        except sqlite3.OperationalError:  # previous DB predates the investigators table
+            pass
+        for g in data["grants"]:
+            g["investigators"] = team.get(g["id"])
     elif name == "Education":
         data["block_grants"] = [tuple(r) for r in old.execute(
             f"SELECT {orgname}, year, program, amount_aud FROM block_grants t")]

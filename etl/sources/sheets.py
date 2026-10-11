@@ -28,6 +28,9 @@ GRANT_SYNONYMS = {
     "year": ["application year", "app year", "year", "commencement year",
              "funding commencement year", "start year", "round year", "funding year"],
     "area": ["broad research area", "research area", "broad area"],
+    "summary": ["plain description", "media summary", "lay summary", "simplified description",
+                "project summary", "summary", "description", "research keywords", "keywords",
+                "plain english summary", "project description"],
     "for": ["field of research", "fields of research", "for", "primary for",
             "for category", "field of research code", "fields of research for"],
 }
@@ -94,7 +97,7 @@ def _row(source, rec, file_year, classify, default_field):
         "scheme": scheme or rec.get("subtype"),
         "round_year": year,
         "title": rec.get("title"),
-        "summary": None,
+        "summary": rec.get("summary"),
         "org_raw": org,
         "state_raw": rec.get("state"),
         "lead_investigator": rec.get("lead"),

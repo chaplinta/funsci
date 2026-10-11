@@ -134,3 +134,89 @@ def to_year(v):
         return None
     m = re.search(r"(19|20)\d{2}", str(v))
     return int(m.group(0)) if m else None
+
+
+# Biology topics. A grant gets a topic from its FoR code (method "for") or, failing that,
+# from keywords in its title/summary (method "keyword"). FoR prefixes cover 2008 and 2020 codes.
+TOPICS = {
+    "Neuroscience": (("1109", "3209", "170101", "170112", "170205", "5202"),
+                     r"neuro|brain|synap|cortex|cortical|neuron|glia|hippocamp|cognit|"
+                     r"spinal cord|dementia|alzheimer|parkinson|epilep|axon|dendrit"),
+    "Evolution": (("0603", "3104"),
+                  r"evolution(?!ary algorithm)|phylogen|speciation|adaptive radiation|natural selection|"
+                  r"sexual selection|macroevolution|coevolution|fossil record|ancestral state"),
+    "Ecology": (("0602", "3103", "050102", "050104", "410401"),
+                r"ecolog|ecosystem|biodiversity|population dynamic|food web|habitat|species distribution"),
+    "Genetics & genomics": (("0604", "3105", "1103"),
+                            r"genom|genetic|epigen|gene expression|gene regulat|chromosom|transcriptom|crispr"),
+    "Cell & molecular biology": (("0601", "3101", "1101", "3205"),
+                                 r"cell biolog|molecular biolog|biochem|enzym|organelle|mitochond|"
+                                 r"signall?ing pathway|stem cell|cytoskelet|protein fold"),
+    "Microbiology": (("0605", "3107", "1108"),
+                     r"microb|bacteri|virus|viral|fung(?:i|al)|pathogen|antimicrobial|parasit"),
+    "Plant biology": (("0607", "3108"),
+                      r"\bplants?\b|photosynth|\bcrops?\b|root system|chloroplast|arabidopsis|\bwheat\b|botan"),
+    "Zoology & animal biology": (("0608", "3109"),
+                                 r"zoolog|animal behaviou?r|vertebrate|invertebrate|insect|marine animal|"
+                                 r"mammal|\bbirds?\b|\bfish(es)?\b|reptile|amphibian|\bcorals?\b|marsupial"),
+    "Physiology": (("0606", "1116", "3208"),
+                   r"physiolog|metabolism|endocrin|homeosta|muscle function|cardiovascular function"),
+    "Immunology": (("1107", "3204"), r"immun|antibod|\bt[- ]cells?\b|\bb[- ]cells?\b|inflammat|vaccin"),
+    "Bioinformatics & computational biology": (("0802040", "080301", "3102", "460106"),
+                                               r"bioinformatic|computational biolog|systems biolog|"
+                                               r"mathematical model.{0,20}biolog"),
+    "Structural biology & biophysics": ((), r"structural biolog|biophysic|cryo-?em|crystallograph|"
+                                            r"protein structure|molecular dynamics"),
+}
+_TOPIC_RX = {t: re.compile(rx, re.I) for t, (_, rx) in TOPICS.items()}
+
+
+def classify_topics(for_code, *texts):
+    """[(topic, method)] for a grant. FoR beats keywords; several topics allowed."""
+    out = {}
+    code = for_code or ""
+    for topic, (prefixes, _) in TOPICS.items():
+        if code and any(code.startswith(p) for p in prefixes):
+            out[topic] = "for"
+    text = " ".join(t for t in texts if t)
+    if text:
+        for topic, rx in _TOPIC_RX.items():
+            if topic not in out and rx.search(text):
+                out[topic] = "keyword"
+    return sorted(out.items())
+
+
+TITLES = re.compile(
+    r"\b(emeritus|professor|prof|associate|assoc|a/prof|asst|assistant|adjunct|scientia|laureate|"
+    r"dr|doctor|mr|mrs|ms|miss|mx|sir|dame|hon|ao|ac|am|frs|faa|fts)\b\.?", re.I)
+
+
+def clean_person(name):
+    """'Prof Jane A Smith' -> 'Jane A Smith'; 'SMITH, Jane' -> 'Jane Smith'."""
+    if not name or not str(name).strip():
+        return None
+    s = str(name).replace("A/Prof", " ").replace("A/Professor", " ")
+    s = TITLES.sub(" ", s)
+    s = re.sub(r"\s+", " ", s).strip(" ,;.")
+    if "," in s:
+        family, given = [p.strip() for p in s.split(",", 1)]
+        s = f"{given} {family}".strip()
+    parts = s.split()
+    caps = [p for p in parts if len(p) > 1 and p.isupper()]
+    if len(parts) > 1 and len(caps) == 1 and parts[0] == caps[0]:
+        # 'SMITH Jane': an upper-case first token is the family name
+        parts = parts[1:] + parts[:1]
+    return " ".join(p if not p.isupper() or len(p) == 1 else p.title() for p in parts) or None
+
+
+def person_key(name):
+    """family|first-initial, lower case. Two people with the same surname and initial collide."""
+    s = clean_person(name)
+    if not s:
+        return None
+    parts = re.sub(r"[^A-Za-z' -]", "", s).split()
+    if not parts:
+        return None
+    family = parts[-1].lower()
+    initial = parts[0][0].lower() if len(parts) > 1 else ""
+    return f"{family}|{initial}"

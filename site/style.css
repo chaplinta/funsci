@@ -91,3 +91,7 @@ a { color: var(--accent); }
 
 figure svg { overflow: visible; }
 [aria-label="tip"] { color: var(--ink); }
+
+.pname { font-size: 1.25rem; margin: 0; flex: 1 1 auto; }
+a.who { cursor: pointer; }
+.tbl table { min-width: 680px; }
