@@ -23,7 +23,7 @@ from collections import Counter
 from etl.normalise import OrgIndex, classify_topics, clean_person, is_person, person_key
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = ["abs", "arc", "nhmrc", "mrff", "crc", "education", "manual"]
+SOURCES = ["abs", "arc", "nhmrc", "mrff", "crc", "education", "hestats", "manual"]
 log = logging.getLogger("run")
 REJECTED = Counter()  # non-person "investigator" names seen this build
 
@@ -52,6 +52,14 @@ def insert(conn, orgs, data):
     for org, year, cat, amt in data.get("research_income", []):
         oid, _ = orgs.match(org)
         conn.execute("INSERT OR REPLACE INTO research_income VALUES (?,?,?,?)", (oid, year, cat, amt))
+        n += 1
+    for org, st, year, students, hdr in data.get("student_stats", []):
+        oid, _ = orgs.match(org, st)
+        conn.execute("INSERT OR REPLACE INTO student_stats VALUES (?,?,?,?)", (oid, year, students, hdr))
+        n += 1
+    for org, st, year, acad, ro in data.get("staff_stats", []):
+        oid, _ = orgs.match(org, st)
+        conn.execute("INSERT OR REPLACE INTO staff_stats VALUES (?,?,?,?)", (oid, year, acad, ro))
         n += 1
     for st, year, persons in data.get("population", []):
         conn.execute("INSERT OR REPLACE INTO population VALUES (?,?,?)", (st, year, persons))
@@ -118,6 +126,14 @@ def carry_over(conn, orgs, prev, name):
             pass
         for g in data["grants"]:
             g["investigators"] = team.get(g["id"])
+    elif name == "HEStats":
+        try:
+            data["student_stats"] = [tuple(r) for r in old.execute(
+                f"SELECT {orgname}, (SELECT state FROM organisations o WHERE o.id=t.org_id), year, students, hdr_students FROM student_stats t")]
+            data["staff_stats"] = [tuple(r) for r in old.execute(
+                f"SELECT {orgname}, (SELECT state FROM organisations o WHERE o.id=t.org_id), year, academic_fte, research_only_fte FROM staff_stats t")]
+        except sqlite3.OperationalError:
+            pass
     elif name == "ABS":
         try:
             data["population"] = [tuple(r) for r in old.execute("SELECT state, year, persons FROM population")]

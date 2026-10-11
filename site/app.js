@@ -121,15 +121,66 @@ function empty(sel, msg = "No data for this selection.") {
   $(sel).innerHTML = `<p class="note">${msg}</p>`;
 }
 
+// Sort value for a cell: explicit c.sv, the raw field, or a number parsed from the rendered text
+// ("$1.2m", "45.3%", "1,234", "2.10×"); text otherwise.
+function sortValue(c, r) {
+  if (c.sv) return c.sv(r);
+  if (c.key) return r[c.key];
+  const t = String(c.f(r)).replace(/<[^>]*>/g, "").trim();
+  const m = t.match(/^([+-]?)\$?([\d,]*\.?\d+)\s*(b|m|k|%|×)?/i);
+  if (!m) return t.toLowerCase() || null;
+  const mult = { b: 1e9, m: 1e6, k: 1e3 }[(m[3] || "").toLowerCase()] || 1;
+  return (m[1] === "-" ? -1 : 1) * parseFloat(m[2].replace(/,/g, "")) * mult;
+}
+
+const tableState = new Map();  // selector -> {rows, cols, grantKey, sort: [colIndex, dir]}
+
 function table(sel, rows, cols, grantKey) {
-  if (!rows.length) return empty(sel);
-  const head = cols.map((c) => `<th class="${c.n ? "n" : ""}">${esc(c.label)}</th>`).join("");
+  if (!rows.length) { tableState.delete(sel); return empty(sel); }
+  const prev = tableState.get(sel);
+  // keep the user's sort when the table is re-rendered with new data
+  const sort = prev && prev.cols.length === cols.length && prev.cols.every((c, i) => c.label === cols[i].label) ? prev.sort : null;
+  tableState.set(sel, { rows, cols, grantKey, sort });
+  drawTable(sel);
+}
+
+function drawTable(sel) {
+  const { rows, cols, grantKey, sort } = tableState.get(sel);
+  let data = rows;
+  if (sort) {
+    const [i, dir] = sort;
+    data = [...rows].sort((a, b) => {
+      const x = sortValue(cols[i], a), y = sortValue(cols[i], b);
+      if (x == null || x === "") return 1;
+      if (y == null || y === "") return -1;
+      return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * dir;
+    });
+  }
+  const head = cols.map((c, i) => {
+    const on = sort && sort[0] === i;
+    const aria = on ? (sort[1] > 0 ? "ascending" : "descending") : "none";
+    return `<th class="${c.n ? "n" : ""} sortable" data-col="${i}" aria-sort="${aria}" tabindex="0">${esc(c.label)}` +
+      `<span class="arrow">${on ? (sort[1] > 0 ? "▲" : "▼") : ""}</span></th>`;
+  }).join("");
   const tr = (r) => grantKey && r[grantKey] ? `<tr class="grow-row" data-grant="${esc(r[grantKey])}" tabindex="0">` : "<tr>";
-  const body = rows.map((r) => tr(r) + cols.map((c) => {
+  const body = data.map((r) => tr(r) + cols.map((c) => {
     const v = c.f ? c.f(r) : esc(r[c.key]);
     return `<td class="${c.n ? "n" : ""}">${v}</td>`;
   }).join("") + "</tr>").join("");
-  $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  $(sel).innerHTML = `<table data-sel="${esc(sel)}"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function onSortClick(e) {
+  const th = e.target.closest("th.sortable");
+  if (!th || (e.type === "keydown" && e.key !== "Enter" && e.key !== " ")) return;
+  e.preventDefault();
+  const sel = th.closest("table").dataset.sel, st = tableState.get(sel);
+  if (!st) return;
+  const i = +th.dataset.col;
+  // numbers start largest-first, text A–Z; a second click reverses
+  const firstDir = typeof sortValue(st.cols[i], st.rows.find((r) => sortValue(st.cols[i], r) != null) || st.rows[0]) === "number" ? -1 : 1;
+  st.sort = st.sort && st.sort[0] === i ? [i, -st.sort[1]] : [i, firstDir];
+  drawTable(sel);
 }
 
 function tiles(sel, items) {
@@ -946,6 +997,8 @@ async function init() {
   $("#inst-pick").addEventListener("change", render);
   ["#bio-topic", "#bio-state", "#p-state", "#p-role", "#wa-region", "#blk-region"].forEach((s) => $(s).addEventListener("change", render));
   $("#p-q").addEventListener("input", () => { personKey = null; clearTimeout(timer); timer = setTimeout(render, 250); });
+  document.addEventListener("click", onSortClick);
+  document.addEventListener("keydown", onSortClick);
   document.addEventListener("keydown", (e) => {
     const row = e.target.closest && e.target.closest("tr[data-grant]");
     if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openGrant(row.dataset.grant); }

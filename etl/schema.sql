@@ -100,3 +100,17 @@ CREATE INDEX IF NOT EXISTS investigators_key ON investigators(name_key);
 -- ABS estimated resident population (June) and CPI (annual average index), for per-capita and real dollars.
 CREATE TABLE IF NOT EXISTS population (state TEXT, year INTEGER, persons REAL, PRIMARY KEY (state, year));
 CREATE TABLE IF NOT EXISTS cpi (year INTEGER PRIMARY KEY, idx REAL);
+
+-- Department of Education higher education statistics, per university and year.
+CREATE TABLE IF NOT EXISTS student_stats (
+  org_id INTEGER REFERENCES organisations(id), year INTEGER,
+  students REAL,                      -- all students, headcount
+  hdr_students REAL,                  -- postgraduate by research (PhD and research masters)
+  PRIMARY KEY (org_id, year)
+);
+CREATE TABLE IF NOT EXISTS staff_stats (
+  org_id INTEGER REFERENCES organisations(id), year INTEGER,
+  academic_fte REAL,                  -- teaching-only + research-only + teaching-and-research
+  research_only_fte REAL,
+  PRIMARY KEY (org_id, year)
+);

@@ -135,3 +135,7 @@ g[aria-label="tip"] path { stroke: var(--line); }
 .top .wrap { position: relative; }
 .theme-switch select { font-size: .8rem; padding: 3px 6px; }
 @media (max-width: 560px) { .theme-switch { position: static; margin-bottom: 8px; } }
+
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--ink); }
+th.sortable .arrow { display: inline-block; width: 1em; font-size: .7em; margin-left: 3px; color: var(--accent); }

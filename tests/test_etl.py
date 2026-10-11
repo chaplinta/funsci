@@ -67,6 +67,9 @@ def offline(monkeypatch, tmp_path):
     from etl.sources import abs as absrc
     monkeypatch.setattr(absrc, "CPI_URLS", [])
     monkeypatch.setattr(absrc, "ERP_URLS", [])
+    from etl.sources import hestats
+    monkeypatch.setattr(hestats, "load", lambda **_: {"student_stats": [("Curtin University", "WA", 2022, 58000, 1500)],
+                                                       "staff_stats": [("Curtin University", "WA", 2022, 2000, 600)], "url": "x"})
     monkeypatch.setattr(education, "RBG_LANDING", ["rbg"])
     monkeypatch.setattr(education, "HERDC_LANDING", ["herdc"])
     return tmp_path
@@ -294,3 +297,26 @@ def test_carry_over_from_older_db(offline, monkeypatch):
     monkeypatch.setattr(nhmrc, "load", lambda **_: (_ for _ in ()).throw(RuntimeError("down")))
     db = run.build(offline / "next", previous=prev)
     assert sqlite3.connect(db).execute("SELECT count(*) FROM grants WHERE source='NHMRC'").fetchone()[0] == 2
+
+
+def test_hestats_parsers():
+    from etl.sources import hestats
+    students = xlsx({"2.1": pd.DataFrame([
+        ["Table 2.1: All Students by State, Higher Education Institution and Broad Level of Course, 2023", None, None, None],
+        [None, "Postgraduate by Research", "Bachelor", "Total"],
+        ["New South Wales", None, None, None],
+        ["The University of Sydney", 4000, 40000, 70000],
+        ["Western Australia", None, None, None],
+        ["Curtin University", "1,500", 30000, 58000],
+        ["Total Western Australia", 9000, 1, 200000],
+    ])})
+    rows = hestats.parse_students(students, "https://x/2023-section-2-all-students.xlsx")
+    assert rows == [("The University of Sydney", "NSW", 2023, 70000.0, 4000.0),
+                    ("Curtin University", "WA", 2023, 58000.0, 1500.0)]
+    staff = xlsx({"1.8": pd.DataFrame([
+        ["Table 1.8: FTE for Full-time, Fractional Full-time and Actual Casual Staff by State, Higher Education Provider and Function, 2023"],
+        [None, "Teaching-only", "Research-only", "Teaching-and-research", "Other function", "Total"],
+        ["Western Australia", None, None, None, None, None],
+        ["Curtin University", 500, 600, 900, 2500, 4500],
+    ])})
+    assert hestats.parse_staff(staff, "https://x/2023-staff.xlsx") == [("Curtin University", "WA", 2023, 2000.0, 600.0)]
