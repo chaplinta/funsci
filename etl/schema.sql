@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS organisations (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,          -- canonical name
   state TEXT,                         -- WA, NSW, ...
-  type TEXT                           -- university | institute | govt | hospital | other
+  type TEXT,                          -- university | institute | govt | hospital | other
+  domain TEXT                         -- website, for researcher look-up links
 );
 
 CREATE TABLE IF NOT EXISTS grants (

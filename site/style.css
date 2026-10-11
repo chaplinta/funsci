@@ -121,3 +121,9 @@ dl.gd dd { margin: 0; }
 .explain h2 { margin-top: 0; }
 .explain p { margin: 8px 0; }
 #tr-findings li, #tr-notes li { margin-bottom: 8px; }
+
+.plinks { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; margin-left: 8px; font-size: .8rem; }
+.plinks a { text-decoration: none; border-bottom: 1px dotted currentColor; }
+.links-row { margin: 4px 0 8px; }
+.links-row .plinks { margin-left: 4px; font-size: .9rem; }
+.gd-person { margin-bottom: 4px; }

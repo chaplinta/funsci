@@ -155,6 +155,21 @@ const orgList = (s) => {
   const xs = (s || "").split(",").filter(Boolean);
   return esc(xs.slice(0, 3).join("; ")) + (xs.length > 3 ? ` <span class="note">+${xs.length - 3} more</span>` : "");
 };
+// Search links for a person. These are searches, not verified profiles: names aren't unique.
+function personLinks(name, org, domain) {
+  if (!name) return "";
+  const e = encodeURIComponent;
+  const inst = domain ? [`https://www.google.com/search?q=${e(`"${name}" site:${domain}`)}`, "Institution"]
+    : org ? [`https://www.google.com/search?q=${e(`"${name}" "${org}"`)}`, "Institution"] : null;
+  const links = [
+    inst,
+    [`https://scholar.google.com/citations?view_op=search_authors&mauthors=${e(name)}`, "Google Scholar"],
+    [`https://www.linkedin.com/search/results/people/?keywords=${e(org ? `${name} ${org}` : name)}`, "LinkedIn"],
+    [`https://orcid.org/orcid-search/search?searchQuery=${e(name)}`, "ORCID"],
+  ].filter(Boolean);
+  return `<span class="plinks">${links.map(([u, t]) =>
+    `<a href="${esc(u)}" target="_blank" rel="noopener" title="Search ${esc(t)} for ${esc(name)}">${esc(t)}</a>`).join("")}</span>`;
+}
 const who = (key, name) => key ? `<a class="who" data-key="${esc(key)}">${esc(name)}</a>` : esc(name);
 
 // One row per (grant, person); role filter optional. Avoids double counting lead + CI rows.
@@ -573,13 +588,16 @@ const views = {
   profile(key, csv) {
     const [w, p] = where([["i.name_key = ?", key]]);
     const grants = q(`SELECT g.id, g.round_year year, g.source, g.scheme, g.title, i.role, g.lead_investigator lead,
-                      COALESCE(o.name, g.org_raw) org, g.state, g.amount_aud, g.team_size team, ${creditAmt()} credit,
+                      COALESCE(o.name, g.org_raw) org, o.domain domain, g.state, g.amount_aud, g.team_size team, ${creditAmt()} credit,
                       g.basic_science basic
                       FROM ${peopleSQL()} i JOIN grants g ON g.id = i.grant_id LEFT JOIN organisations o ON o.id = g.org_id
                       WHERE ${w} ORDER BY g.round_year DESC, g.amount_aud DESC`, p);
     if (csv) return grants;
     const name = q("SELECT name, COUNT(*) c FROM investigators WHERE name_key = ? GROUP BY 1 ORDER BY c DESC LIMIT 1", [key])[0];
     $("#p-name").textContent = name ? name.name : key;
+    const latest = grants.find((g) => g.org) || {};
+    $("#p-links").innerHTML = `<span class="note">Search for this person${latest.org ? ` (most recent organisation: ${esc(latest.org)})` : ""}:</span> ` +
+      personLinks(name ? name.name : key, latest.org, latest.domain);
     const orgs = [...new Set(grants.map((g) => g.org).filter(Boolean))];
     const yrs = grants.map((g) => g.year).filter(Boolean);
     tiles("#p-tiles", [
@@ -813,7 +831,7 @@ function sourceLink(g) {
 }
 
 async function openGrant(id) {
-  const g = q(`SELECT g.*, o.name org_name, o.type org_type FROM grants g LEFT JOIN organisations o ON o.id = g.org_id
+  const g = q(`SELECT g.*, o.name org_name, o.type org_type, o.domain org_domain FROM grants g LEFT JOIN organisations o ON o.id = g.org_id
                WHERE g.id = ?`, [id])[0];
   if (!g) return;
   const people = q(`SELECT name_key k, MAX(name) name, GROUP_CONCAT(DISTINCT role) roles FROM investigators
@@ -833,7 +851,12 @@ async function openGrant(id) {
       ${row("Year", esc(g.round_year))}
       ${row("Administering organisation", esc(g.org_name || g.org_raw) + (g.state ? ` (${esc(g.state)})` : ""))}
       ${row(people.length > 1 ? "Investigators" : "Investigator",
-        people.map((p) => `${who(p.k, p.name)}${p.roles && p.roles !== "CI" ? ` <span class="note">${esc(p.roles)}</span>` : ""}`).join("<br>"))}
+        people.map((p) => {
+          const lead = (p.roles || "").includes("lead");
+          // only the lead is known to be at the administering organisation
+          return `<div class="gd-person">${who(p.k, p.name)}${lead ? ' <span class="note">lead</span>' : ""}` +
+            personLinks(p.name, lead ? g.org_name : null, lead ? g.org_domain : null) + "</div>";
+        }).join(""))}
       ${row("Field of Research", g.for_code ? `${esc(g.for_code)}${div ? ` <span class="note">(${esc(div)})</span>` : ""}` : null)}
       ${row("Field group", esc(g.field_group))}
       ${row("Research area", esc(g.research_area))}

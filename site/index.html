@@ -127,7 +127,7 @@
   </section>
 
   <section data-panel="people" class="panel" hidden>
-    <p class="note">Researchers are matched by surname and first initial across all funders. Two people with the same surname and initial will be merged; a name change splits one person in two. Each grant's full amount is credited to every named investigator. NHMRC, MRFF and CRC name only the lead (CIA or lead partner).</p>
+    <p class="note">Researchers are matched by surname and first initial across all funders. Two people with the same surname and initial will be merged; a name change splits one person in two. By default each grant's value is split equally among the people named on it; switch "Researcher credit" to full grant value to count the whole grant for everyone. NHMRC, MRFF and CRC name only the lead (CIA or lead partner), so their grants aren't split. Links next to a name are searches, not verified profiles.</p>
     <div class="row">
       <label class="grow">Find a researcher <input id="p-q" type="search" placeholder="e.g. Smith or Jane Smith"></label>
       <label>State of grant <select id="p-state"><option value="">All</option></select></label>
@@ -135,6 +135,7 @@
     </div>
     <div id="p-profile" hidden>
       <div class="row"><h2 id="p-name" class="pname"></h2><button id="p-back" class="btn">Back to list</button><button id="p-csv" class="btn">Download grants CSV</button></div>
+      <p id="p-links" class="links-row"></p>
       <div class="tiles" id="p-tiles"></div>
       <figure class="card"><figcaption>Grants by year and funder (A$m)</figcaption><div id="p-year"></div></figure>
       <figure class="card"><figcaption>Topics (A$m, a grant can count in several)</figcaption><div id="p-topics"></div></figure>
@@ -187,7 +188,8 @@ GROUP BY 1, 2 ORDER BY aud_m DESC LIMIT 20;</textarea>
         <li><b>CRC</b> rows are Commonwealth grant funding to Cooperative Research Centres and CRC Projects, credited to the lead organisation. Participant cash and in-kind contributions are not included.</li>
         <li><b>Field</b> is derived from the primary Field of Research (FoR) division, 2008 or 2020 codes. Natural sciences: 01–07, 30, 31, 34, 37, 41, 49, 51. Engineering &amp; IT: 08–10, 40, 46. Health &amp; medical: 11, 32, 42. NHMRC and MRFF grants without a FoR code are classed Health &amp; medical.</li>
         <li><b>Biology topics</b> come from the grant's primary FoR code (2008 and 2020 codes), plus keyword matches in the title and, where published, the summary, keywords or description. Neuroscience: 1109, 3209, 5202, 170101, 170112, 170205. Evolution: 0603, 3104. Ecology: 0602, 3103. Genetics &amp; genomics: 0604, 3105, 1103. Cell &amp; molecular: 0601, 3101, 1101, 3205. Microbiology: 0605, 3107, 1108. Plant biology: 0607, 3108. Zoology: 0608, 3109. Physiology: 0606, 1116, 3208. Immunology: 1107, 3204. Bioinformatics: 3102 and related. Structural biology &amp; biophysics: keywords only. Keyword lists are in <code>etl/normalise.py</code>. Keyword matching catches grants filed under another FoR (e.g. an evolution project coded as genetics) but also some clinical grants (e.g. "brain cancer" under neuroscience).</li>
-        <li><b>Researchers</b> are matched on surname plus first initial after stripping titles. ARC grants list every chief investigator where the ARC API provides them; NHMRC, MRFF and CRC list the lead only. Grant amounts are credited in full to each named investigator, so researcher totals overlap.</li>
+        <li><b>Researcher links</b> (Institution, Google Scholar, LinkedIn, ORCID) open searches by name, not verified profiles, so check you have the right person. The institution search uses the organisation's website where known; co-investigators are searched by name only because the data doesn't say where they work.</li>
+        <li><b>Researchers</b> are matched on surname plus first initial after stripping titles. ARC grants list every chief investigator where the ARC API provides them; NHMRC, MRFF and CRC list the lead only. By default grant amounts are split equally among named investigators; with full credit, researcher totals overlap.</li>
         <li><b>Per capita</b> uses ABS estimated resident population (June) for each year, from the ABS Data API. If that fetch fails, it falls back to June 2024 population for every year. Totals over several years are divided by the average population over those years.</li>
         <li><b>Real dollars</b> on trend charts are converted with the ABS Consumer Price Index (all groups, eight capitals, annual average) to the latest year. Other charts and tables are nominal.</li>
         <li><b>Australia excl. WA</b> is the other seven states and territories combined, using the state of the administering organisation.</li>

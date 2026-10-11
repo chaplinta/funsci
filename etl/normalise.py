@@ -52,17 +52,18 @@ class OrgIndex:
         self.ids = {}
         with open(MANUAL / "organisations.csv", newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                oid = self._insert(row["name"], row["state"] or None, row["type"] or None)
+                oid = self._insert(row["name"], row["state"] or None, row["type"] or None,
+                                   (row.get("domain") or "").strip() or None)
                 for a in [row["name"]] + [x for x in (row["aliases"] or "").split("|") if x]:
                     self.alias[clean_key(a)] = oid
 
-    def _insert(self, name, state, otype):
+    def _insert(self, name, state, otype, domain=None):
         cur = self.conn.execute("SELECT id FROM organisations WHERE name=?", (name,))
         r = cur.fetchone()
         if r:
             return r[0]
         cur = self.conn.execute(
-            "INSERT INTO organisations(name,state,type) VALUES (?,?,?)", (name, state, otype))
+            "INSERT INTO organisations(name,state,type,domain) VALUES (?,?,?,?)", (name, state, otype, domain))
         return cur.lastrowid
 
     def match(self, raw, state=None):

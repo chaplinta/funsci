@@ -1,80 +1,80 @@
-name,state,type,aliases
-The University of Western Australia,WA,university,University of Western Australia|UWA|Univ of Western Australia
-Curtin University,WA,university,Curtin University of Technology|Curtin
-Murdoch University,WA,university,Murdoch
-Edith Cowan University,WA,university,ECU|Edith Cowan
-The University of Notre Dame Australia,WA,university,University of Notre Dame Australia|Notre Dame
-The Kids Research Institute Australia,WA,institute,Telethon Kids Institute|Telethon Institute for Child Health Research|Telethon Kids|TICHR
-Harry Perkins Institute of Medical Research,WA,institute,Harry Perkins Institute|Perkins Institute|Western Australian Institute for Medical Research|WAIMR
-Lions Eye Institute,WA,institute,Lions Eye Institute Limited
-Ear Science Institute Australia,WA,institute,Ear Science Institute
-Perron Institute for Neurological and Translational Science,WA,institute,Perron Institute|Australian Neuromuscular Research Institute
-Western Australian Museum,WA,govt,WA Museum
-Department of Health WA,WA,govt,Department of Health Western Australia|WA Health|North Metropolitan Health Service|South Metropolitan Health Service|East Metropolitan Health Service|Child and Adolescent Health Service
-Pawsey Supercomputing Research Centre,WA,institute,Pawsey Supercomputing Centre|Pawsey
-The Australian National University,ACT,university,Australian National University|ANU
-University of Canberra,ACT,university,
-The University of Sydney,NSW,university,University of Sydney|USyd
-The University of New South Wales,NSW,university,University of New South Wales|UNSW|UNSW Sydney
-Macquarie University,NSW,university,
-University of Technology Sydney,NSW,university,UTS|University of Technology  Sydney
-Western Sydney University,NSW,university,University of Western Sydney
-The University of Newcastle,NSW,university,University of Newcastle
-University of Wollongong,NSW,university,
-University of New England,NSW,university,
-Southern Cross University,NSW,university,
-Charles Sturt University,NSW,university,
-Australian Catholic University,NSW,university,
-The Garvan Institute of Medical Research,NSW,institute,Garvan Institute of Medical Research|Garvan Institute
-Children's Medical Research Institute,NSW,institute,
-Neuroscience Research Australia,NSW,institute,NeuRA
-The George Institute for Global Health,NSW,institute,George Institute for Global Health
-Victor Chang Cardiac Research Institute,NSW,institute,
-Woolcock Institute of Medical Research,NSW,institute,
-Centenary Institute of Cancer Medicine and Cell Biology,NSW,institute,Centenary Institute
-Hunter Medical Research Institute,NSW,institute,
-The Kirby Institute,NSW,institute,
-The University of Melbourne,VIC,university,University of Melbourne
-Monash University,VIC,university,
-La Trobe University,VIC,university,
-Deakin University,VIC,university,
-RMIT University,VIC,university,Royal Melbourne Institute of Technology
-Swinburne University of Technology,VIC,university,
-Victoria University,VIC,university,
-Federation University Australia,VIC,university,University of Ballarat
-The Walter and Eliza Hall Institute of Medical Research,VIC,institute,Walter and Eliza Hall Institute of Medical Research|WEHI
-Murdoch Children's Research Institute,VIC,institute,Murdoch Childrens Research Institute|MCRI
-Baker Heart and Diabetes Institute,VIC,institute,Baker IDI Heart and Diabetes Institute|Baker Institute
-Burnet Institute,VIC,institute,Macfarlane Burnet Institute for Medical Research and Public Health
-Florey Institute of Neuroscience and Mental Health,VIC,institute,The Florey Institute of Neuroscience and Mental Health|Florey Institute
-Peter MacCallum Cancer Centre,VIC,institute,Peter MacCallum Cancer Institute
-Hudson Institute of Medical Research,VIC,institute,
-St Vincent's Institute of Medical Research,VIC,institute,
-The University of Queensland,QLD,university,University of Queensland|UQ
-Queensland University of Technology,QLD,university,QUT
-Griffith University,QLD,university,
-James Cook University,QLD,university,
-University of Southern Queensland,QLD,university,University of Southern Queensland
-University of the Sunshine Coast,QLD,university,
-CQUniversity,QLD,university,Central Queensland University
-Bond University,QLD,university,
-QIMR Berghofer Medical Research Institute,QLD,institute,QIMR Berghofer|Queensland Institute of Medical Research|Council of the Queensland Institute of Medical Research
-Mater Research,QLD,institute,Mater Medical Research Institute
-The University of Adelaide,SA,university,University of Adelaide
-Flinders University,SA,university,Flinders University of South Australia
-University of South Australia,SA,university,UniSA
-Adelaide University,SA,university,
-South Australian Health and Medical Research Institute,SA,institute,SAHMRI
-University of Tasmania,TAS,university,
-Charles Darwin University,NT,university,
-Menzies School of Health Research,NT,institute,
-Batchelor Institute of Indigenous Tertiary Education,NT,university,
-Commonwealth Scientific and Industrial Research Organisation,ACT,govt,CSIRO
-Australian Institute of Marine Science,QLD,govt,AIMS
-Australian Antarctic Division,TAS,govt,
-Institute for Respiratory Health,WA,institute,Lung Institute of Western Australia
-Women and Infants Research Foundation,WA,institute,
-St John of God Subiaco Hospital,WA,hospital,
-Channel 7 Telethon Trust,WA,other,
-Perth Children's Hospital,WA,hospital,Perth Children's Hospital / The Kids Research Institute Australia|Rare Care Comprehensive Centre (Perth Children's Hospital)
-WA Health Translation Network,WA,institute,
+name,state,type,aliases,domain
+The University of Western Australia,WA,university,University of Western Australia|UWA|Univ of Western Australia,uwa.edu.au
+Curtin University,WA,university,Curtin University of Technology|Curtin,curtin.edu.au
+Murdoch University,WA,university,Murdoch,murdoch.edu.au
+Edith Cowan University,WA,university,ECU|Edith Cowan,ecu.edu.au
+The University of Notre Dame Australia,WA,university,University of Notre Dame Australia|Notre Dame,notredame.edu.au
+The Kids Research Institute Australia,WA,institute,Telethon Kids Institute|Telethon Institute for Child Health Research|Telethon Kids|TICHR,thekids.org.au
+Harry Perkins Institute of Medical Research,WA,institute,Harry Perkins Institute|Perkins Institute|Western Australian Institute for Medical Research|WAIMR,perkins.org.au
+Lions Eye Institute,WA,institute,Lions Eye Institute Limited,lei.org.au
+Ear Science Institute Australia,WA,institute,Ear Science Institute,earscience.org.au
+Perron Institute for Neurological and Translational Science,WA,institute,Perron Institute|Australian Neuromuscular Research Institute,perroninstitute.org
+Western Australian Museum,WA,govt,WA Museum,museum.wa.gov.au
+Department of Health WA,WA,govt,Department of Health Western Australia|WA Health|North Metropolitan Health Service|South Metropolitan Health Service|East Metropolitan Health Service|Child and Adolescent Health Service,health.wa.gov.au
+Pawsey Supercomputing Research Centre,WA,institute,Pawsey Supercomputing Centre|Pawsey,pawsey.org.au
+The Australian National University,ACT,university,Australian National University|ANU,anu.edu.au
+University of Canberra,ACT,university,,canberra.edu.au
+The University of Sydney,NSW,university,University of Sydney|USyd,sydney.edu.au
+The University of New South Wales,NSW,university,University of New South Wales|UNSW|UNSW Sydney,unsw.edu.au
+Macquarie University,NSW,university,,mq.edu.au
+University of Technology Sydney,NSW,university,UTS|University of Technology  Sydney,uts.edu.au
+Western Sydney University,NSW,university,University of Western Sydney,westernsydney.edu.au
+The University of Newcastle,NSW,university,University of Newcastle,newcastle.edu.au
+University of Wollongong,NSW,university,,uow.edu.au
+University of New England,NSW,university,,une.edu.au
+Southern Cross University,NSW,university,,scu.edu.au
+Charles Sturt University,NSW,university,,csu.edu.au
+Australian Catholic University,NSW,university,,acu.edu.au
+The Garvan Institute of Medical Research,NSW,institute,Garvan Institute of Medical Research|Garvan Institute,garvan.org.au
+Children's Medical Research Institute,NSW,institute,,cmri.org.au
+Neuroscience Research Australia,NSW,institute,NeuRA,neura.edu.au
+The George Institute for Global Health,NSW,institute,George Institute for Global Health,georgeinstitute.org
+Victor Chang Cardiac Research Institute,NSW,institute,,victorchang.edu.au
+Woolcock Institute of Medical Research,NSW,institute,,woolcock.org.au
+Centenary Institute of Cancer Medicine and Cell Biology,NSW,institute,Centenary Institute,centenary.org.au
+Hunter Medical Research Institute,NSW,institute,,hmri.org.au
+The Kirby Institute,NSW,institute,,kirby.unsw.edu.au
+The University of Melbourne,VIC,university,University of Melbourne,unimelb.edu.au
+Monash University,VIC,university,,monash.edu
+La Trobe University,VIC,university,,latrobe.edu.au
+Deakin University,VIC,university,,deakin.edu.au
+RMIT University,VIC,university,Royal Melbourne Institute of Technology,rmit.edu.au
+Swinburne University of Technology,VIC,university,,swinburne.edu.au
+Victoria University,VIC,university,,vu.edu.au
+Federation University Australia,VIC,university,University of Ballarat,federation.edu.au
+The Walter and Eliza Hall Institute of Medical Research,VIC,institute,Walter and Eliza Hall Institute of Medical Research|WEHI,wehi.edu.au
+Murdoch Children's Research Institute,VIC,institute,Murdoch Childrens Research Institute|MCRI,mcri.edu.au
+Baker Heart and Diabetes Institute,VIC,institute,Baker IDI Heart and Diabetes Institute|Baker Institute,baker.edu.au
+Burnet Institute,VIC,institute,Macfarlane Burnet Institute for Medical Research and Public Health,burnet.edu.au
+Florey Institute of Neuroscience and Mental Health,VIC,institute,The Florey Institute of Neuroscience and Mental Health|Florey Institute,florey.edu.au
+Peter MacCallum Cancer Centre,VIC,institute,Peter MacCallum Cancer Institute,petermac.org
+Hudson Institute of Medical Research,VIC,institute,,hudson.org.au
+St Vincent's Institute of Medical Research,VIC,institute,,svi.edu.au
+The University of Queensland,QLD,university,University of Queensland|UQ,uq.edu.au
+Queensland University of Technology,QLD,university,QUT,qut.edu.au
+Griffith University,QLD,university,,griffith.edu.au
+James Cook University,QLD,university,,jcu.edu.au
+University of Southern Queensland,QLD,university,University of Southern Queensland,unisq.edu.au
+University of the Sunshine Coast,QLD,university,,usc.edu.au
+CQUniversity,QLD,university,Central Queensland University,cqu.edu.au
+Bond University,QLD,university,,bond.edu.au
+QIMR Berghofer Medical Research Institute,QLD,institute,QIMR Berghofer|Queensland Institute of Medical Research|Council of the Queensland Institute of Medical Research,qimrberghofer.edu.au
+Mater Research,QLD,institute,Mater Medical Research Institute,materresearch.org.au
+The University of Adelaide,SA,university,University of Adelaide,adelaide.edu.au
+Flinders University,SA,university,Flinders University of South Australia,flinders.edu.au
+University of South Australia,SA,university,UniSA,unisa.edu.au
+Adelaide University,SA,university,,
+South Australian Health and Medical Research Institute,SA,institute,SAHMRI,sahmri.org.au
+University of Tasmania,TAS,university,,utas.edu.au
+Charles Darwin University,NT,university,,cdu.edu.au
+Menzies School of Health Research,NT,institute,,menzies.edu.au
+Batchelor Institute of Indigenous Tertiary Education,NT,university,,batchelor.edu.au
+Commonwealth Scientific and Industrial Research Organisation,ACT,govt,CSIRO,csiro.au
+Australian Institute of Marine Science,QLD,govt,AIMS,aims.gov.au
+Australian Antarctic Division,TAS,govt,,antarctica.gov.au
+Institute for Respiratory Health,WA,institute,Lung Institute of Western Australia,resphealth.org.au
+Women and Infants Research Foundation,WA,institute,,
+St John of God Subiaco Hospital,WA,hospital,,
+Channel 7 Telethon Trust,WA,other,,
+Perth Children's Hospital,WA,hospital,Perth Children's Hospital / The Kids Research Institute Australia|Rare Care Comprehensive Centre (Perth Children's Hospital),
+WA Health Translation Network,WA,institute,,
