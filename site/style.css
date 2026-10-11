@@ -127,3 +127,11 @@ dl.gd dd { margin: 0; }
 .links-row { margin: 4px 0 8px; }
 .links-row .plinks { margin-left: 4px; font-size: .9rem; }
 .gd-person { margin-bottom: 4px; }
+
+/* Plot tooltips draw on --plot-background (white by default): match the theme */
+figure svg, .card svg { --plot-background: var(--surface); }
+g[aria-label="tip"] path { stroke: var(--line); }
+.theme-switch { position: absolute; top: 18px; right: 16px; }
+.top .wrap { position: relative; }
+.theme-switch select { font-size: .8rem; padding: 3px 6px; }
+@media (max-width: 560px) { .theme-switch { position: static; margin-bottom: 8px; } }

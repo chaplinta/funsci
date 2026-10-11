@@ -180,7 +180,7 @@ function stackedYears(sel, rows, height = 280) {
   if (!rows.length) return empty(sel);
   plotInto(sel, {
     height, x: yearX(), y: { label: "A$m", grid: true }, color: colorScale(),
-    marks: [Plot.barY(rows, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
+    marks: [Plot.barY(rows, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { x: (d) => String(d), m: ",.1f" } } }), Plot.ruleY([0])],
   });
 }
 
@@ -235,7 +235,7 @@ function waVsRest(sel, rows, height = 260) {
     marks: [
       Plot.lineY(data, { x: "year", y: "v", stroke: "region", strokeWidth: 2 }),
       Plot.dot(data, { x: "year", y: "v", fill: "region", r: 2.5 }),
-      Plot.tip(data, Plot.pointer({ x: "year", y: "v", channels: { region: "region" }, format: { y: ",.2f" } })),
+      Plot.tip(data, Plot.pointer({ x: "year", y: "v", channels: { region: "region" }, format: { x: (d) => String(d), y: ",.2f" } })),
     ],
   });
 }
@@ -269,7 +269,7 @@ const views = {
     else plotInto("#ov-year", {
       height: 320, x: yearX(), y: { label: "A$m", grid: true },
       color: colorScale(),
-      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }),
+      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { x: (d) => String(d), m: ",.1f" } } }),
         Plot.ruleY([0])],
     });
 
@@ -313,7 +313,7 @@ const views = {
         Plot.ruleY([POP.WA / POP_TOTAL], { stroke: css("--ink-3"), strokeDasharray: "4 4" }),
         Plot.lineY(share, { x: "year", y: "share", stroke: "source", strokeWidth: 2 }),
         Plot.dot(share, { x: "year", y: "share", fill: "source", r: 3 }),
-        Plot.tip(share, Plot.pointer({ x: "year", y: "share", channels: { source: "source" }, format: { y: ".1%" } })),
+        Plot.tip(share, Plot.pointer({ x: "year", y: "share", channels: { source: "source" }, format: { x: (d) => String(d), y: ".1%" } })),
       ],
     });
 
@@ -387,7 +387,7 @@ const views = {
     if (!byYear.length) empty("#inst-year");
     else plotInto("#inst-year", {
       height: 280, x: yearX(), y: { label: "A$m", grid: true }, color: colorScale(),
-      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
+      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { x: (d) => String(d), m: ",.1f" } } }), Plot.ruleY([0])],
     });
 
     const b = q(`SELECT year, CASE WHEN program IN ('RTP','RSP') THEN program ELSE 'Earlier schemes' END program,
@@ -396,7 +396,7 @@ const views = {
     else plotInto("#inst-block", {
       height: 240, x: yearX(), y: { label: "A$m", grid: true },
       color: { domain: ["RTP", "RSP", "Earlier schemes"], range: [css("--s1"), css("--s2"), css("--s3")], legend: true },
-      marks: [Plot.barY(b, { x: "year", y: "m", fill: "program", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
+      marks: [Plot.barY(b, { x: "year", y: "m", fill: "program", inset: 1, rx: 2, tip: { format: { x: (d) => String(d), m: ",.1f" } } }), Plot.ruleY([0])],
     });
 
     const h = q(`SELECT year, category, amount_aud/1e6 m FROM research_income
@@ -406,7 +406,7 @@ const views = {
     else plotInto("#inst-herdc", {
       height: 240, x: yearX(), y: { label: "A$m", grid: true },
       color: { domain: cats, range: ["--s1", "--s2", "--s3", "--s4"].map(css), legend: true },
-      marks: [Plot.barY(h, { x: "year", y: "m", fill: "category", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
+      marks: [Plot.barY(h, { x: "year", y: "m", fill: "category", inset: 1, rx: 2, tip: { format: { x: (d) => String(d), m: ",.1f" } } }), Plot.ruleY([0])],
     });
 
     table("#inst-schemes", q(`SELECT source, scheme, COUNT(*) n, SUM(amount_aud) s FROM grants g WHERE ${w}
@@ -462,7 +462,7 @@ const views = {
     if (!byYear.length) empty("#ph-year", "No philanthropy records loaded.");
     else plotInto("#ph-year", {
       height: 240, x: yearX(), y: { label: "A$m", grid: true },
-      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: css("--s5"), rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
+      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: css("--s5"), rx: 2, tip: { format: { x: (d) => String(d), m: ",.1f" } } }), Plot.ruleY([0])],
     });
     const link = (r) => r.source_url ? `<a href="${esc(r.source_url)}" rel="noopener">source</a>` : "";
     table("#ph-table", ph, [
@@ -509,7 +509,7 @@ const views = {
     else plotInto("#bio-heat", {
       height: 60 + TOPICS.length * 28, ...catY(TOPICS, 250), x: yearX({ axis: "top" }),
       color: { type: "sqrt", scheme: "blues", legend: true, label: "A$m" },
-      marks: [Plot.cell(heat, { x: "year", y: "topic", fill: "m", inset: 0.5, tip: { format: { m: ",.1f", n: true } },
+      marks: [Plot.cell(heat, { x: "year", y: "topic", fill: "m", inset: 0.5, tip: { format: { x: (d) => String(d), y: true, fill: ",.1f", n: true } },
         channels: { n: { value: "n", label: "grants" } } })],
     });
 
@@ -658,7 +658,7 @@ const views = {
     else plotInto("#blk-year", {
       height: 280, x: yearX(), y: { label: "A$m", grid: true },
       color: { domain: progs, range: ["--s1", "--s2", "--s3"].map(css), legend: true },
-      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "program", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }), Plot.ruleY([0])],
+      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "program", inset: 1, rx: 2, tip: { format: { x: (d) => String(d), m: ",.1f" } } }), Plot.ruleY([0])],
     });
 
     const bs = q(`SELECT o.state, SUM(b.amount_aud) s ${base} AND o.state IS NOT NULL GROUP BY 1`, yr);
@@ -688,7 +688,7 @@ const views = {
       marks: [
         Plot.lineY(wa, { x: "year", y: "m", stroke: "uni", strokeWidth: 2 }),
         Plot.dot(wa, { x: "year", y: "m", fill: "uni", r: 2.5 }),
-        Plot.tip(wa, Plot.pointer({ x: "year", y: "m", channels: { uni: "uni" }, format: { y: ",.1f" } })),
+        Plot.tip(wa, Plot.pointer({ x: "year", y: "m", channels: { uni: "uni" }, format: { x: (d) => String(d), y: ",.1f" } })),
       ],
     });
 
@@ -699,7 +699,7 @@ const views = {
       height: 240, x: yearLineX(share), y: { label: "WA share", tickFormat: "%", grid: true, zero: true },
       marks: [
         Plot.ruleY([popShare("WA")], { stroke: css("--ink-3"), strokeDasharray: "4 4" }),
-        Plot.lineY(share, { x: "year", y: "share", stroke: css("--accent"), strokeWidth: 2, tip: { format: { y: ".1%" } } }),
+        Plot.lineY(share, { x: "year", y: "share", stroke: css("--accent"), strokeWidth: 2, tip: { format: { x: (d) => String(d), y: ".1%" } } }),
       ],
     });
 
@@ -744,7 +744,7 @@ const views = {
         height: 260, x: yearLineX(data), y: { label, grid: true, zero: true }, color: col,
         marks: [Plot.lineY(data, { x: "year", y: "v", stroke: "region", strokeWidth: 2 }),
           Plot.dot(data, { x: "year", y: "v", fill: "region", r: 2.5 }),
-          Plot.tip(data, Plot.pointer({ x: "year", y: "v", channels: { region: "region" }, format: { y: fmt } }))],
+          Plot.tip(data, Plot.pointer({ x: "year", y: "v", channels: { region: "region" }, format: { x: (d) => String(d), y: fmt } }))],
       });
     };
     const dl = m.real_dollars ? `${m.base_year} dollars` : "nominal";
@@ -759,7 +759,7 @@ const views = {
     else plotInto("#tr-share", {
       height: 240, x: yearLineX(sh), y: { label: "WA share of national basic science", tickFormat: "%", grid: true, zero: true },
       marks: [Plot.ruleY([POP.WA / POP_TOTAL], { stroke: css("--ink-3"), strokeDasharray: "4 4" }),
-        Plot.lineY(sh, { x: "year", y: "wa_share", stroke: css("--accent"), strokeWidth: 2, tip: { format: { y: ".1%" } } })],
+        Plot.lineY(sh, { x: "year", y: "wa_share", stroke: css("--accent"), strokeWidth: 2, tip: { format: { x: (d) => String(d), y: ".1%" } } })],
     });
 
     const tp = a.topics.flatMap((t) => [
@@ -971,6 +971,13 @@ async function init() {
   document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab)));
   let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 200); });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+  $("#theme").value = document.documentElement.dataset.theme || "";
+  $("#theme").addEventListener("change", (e) => {
+    const t = e.target.value;
+    if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+    try { t ? localStorage.setItem("theme", t) : localStorage.removeItem("theme"); } catch (err) { /* private mode */ }
+    render();  // charts read colours at draw time
+  });
 
   $("#loading").remove();
   const fromHash = () => { const t = location.hash.slice(1); if (t !== current || !db) show(views[t] ? t : "overview"); };
