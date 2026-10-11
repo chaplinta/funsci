@@ -21,7 +21,7 @@ from etl import harvest
 from etl.normalise import OrgIndex, classify_topics, clean_person, person_key
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = ["arc", "nhmrc", "mrff", "crc", "education", "manual"]
+SOURCES = ["abs", "arc", "nhmrc", "mrff", "crc", "education", "manual"]
 log = logging.getLogger("run")
 
 GRANT_COLS = ["id", "source", "scheme", "round_year", "title", "summary", "org_id", "org_raw",
@@ -45,6 +45,12 @@ def insert(conn, orgs, data):
     for org, year, cat, amt in data.get("research_income", []):
         oid, _ = orgs.match(org)
         conn.execute("INSERT OR REPLACE INTO research_income VALUES (?,?,?,?)", (oid, year, cat, amt))
+        n += 1
+    for st, year, persons in data.get("population", []):
+        conn.execute("INSERT OR REPLACE INTO population VALUES (?,?,?)", (st, year, persons))
+        n += 1
+    for year, idx in data.get("cpi", []):
+        conn.execute("INSERT OR REPLACE INTO cpi VALUES (?,?)", (year, idx))
         n += 1
     for p in data.get("philanthropy", []):
         oid, _ = orgs.match(p["recipient_raw"])
@@ -71,11 +77,14 @@ def insert_links(conn, g):
     people = g.get("investigators") or []
     if g.get("lead_investigator") and not any(r == "lead" for _, r in people):
         people = [(g["lead_investigator"], "lead")] + list(people)
-    for raw, role in people:
-        key = person_key(raw)
-        if key:
-            conn.execute("INSERT OR IGNORE INTO investigators VALUES (?,?,?,?)",
-                         (gid, clean_person(raw), key, role))
+    people = [(raw, role, person_key(raw)) for raw, role in people]
+    people = [p for p in people if p[2]]
+    n = len({k for _, _, k in people})
+    share = g["amount_aud"] / n if n and g.get("amount_aud") is not None else None
+    conn.execute("UPDATE grants SET team_size=? WHERE id=?", (n or None, gid))
+    for raw, role, key in people:
+        conn.execute("INSERT OR IGNORE INTO investigators VALUES (?,?,?,?,?)",
+                     (gid, clean_person(raw), key, role, share))
 
 
 def carry_over(conn, orgs, prev, name):
@@ -98,6 +107,12 @@ def carry_over(conn, orgs, prev, name):
             pass
         for g in data["grants"]:
             g["investigators"] = team.get(g["id"])
+    elif name == "ABS":
+        try:
+            data["population"] = [tuple(r) for r in old.execute("SELECT state, year, persons FROM population")]
+            data["cpi"] = [tuple(r) for r in old.execute("SELECT year, idx FROM cpi")]
+        except sqlite3.OperationalError:
+            pass
     elif name == "Education":
         data["block_grants"] = [tuple(r) for r in old.execute(
             f"SELECT {orgname}, year, program, amount_aud FROM block_grants t")]
@@ -197,6 +212,9 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     db = build(Path(args.out), args.previous, args.only.split(",") if args.only else None)
     publish(db, Path(args.site_data))
+    from etl import analysis
+    _, md = analysis.run(db, Path(args.site_data), Path(args.out) / "analysis.md")
+    log.info("analysis report:\n%s", md)
 
 
 if __name__ == "__main__":

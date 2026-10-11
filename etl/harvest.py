@@ -39,10 +39,10 @@ WAYBACK = "https://web.archive.org/web/{ts}id_/{url}"  # id_ = original bytes, n
 ARCHIVE_HITS = []  # URLs served from the Internet Archive this run
 
 
-def _get(url, retries):
+def _get(url, retries, headers=None):
     for attempt in range(retries):
         try:
-            r = SESSION.get(url, timeout=TIMEOUT)
+            r = SESSION.get(url, timeout=TIMEOUT, headers=headers)
             r.raise_for_status()
             return r.content
         except requests.Timeout:
@@ -62,7 +62,7 @@ def _from_archive(url, retries):
     return data
 
 
-def fetch(url, binary=False, retries=3, use_cache=True):
+def fetch(url, binary=False, retries=3, use_cache=True, headers=None, archive=True):
     if not url.startswith("http"):  # local file, e.g. data/raw/...
         data = Path(url).read_bytes()
         return data if binary else data.decode("utf-8", errors="replace")
@@ -72,11 +72,15 @@ def fetch(url, binary=False, retries=3, use_cache=True):
     if use_cache and path.exists():
         data = path.read_bytes()
     elif host in DEAD_HOSTS:
+        if not archive:
+            raise requests.ConnectionError(f"{host} timed out earlier in this run")
         data = _from_archive(url, retries)
     else:
         try:
-            data = _get(url, retries)
+            data = _get(url, retries, headers)
         except requests.Timeout:
+            if not archive:
+                raise
             log.warning("%s timed out; using archive.org for this host", host)
             DEAD_HOSTS.add(host)
             data = _from_archive(url, retries)

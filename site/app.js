@@ -56,7 +56,7 @@ function filters() {
     from: +$("#f-from").value, to: +$("#f-to").value,
     sources: [...document.querySelectorAll("#f-sources input:checked")].map((i) => i.value),
     field: $("#f-field").value, basic: $("#f-basic").checked,
-    topic: $("#f-topic").value, kw: $("#f-kw").checked,
+    topic: $("#f-topic").value, kw: $("#f-kw").checked, credit: $("#f-credit").value,
   };
 }
 
@@ -158,7 +158,7 @@ const orgList = (s) => {
 const who = (key, name) => key ? `<a class="who" data-key="${esc(key)}">${esc(name)}</a>` : esc(name);
 
 // One row per (grant, person); role filter optional. Avoids double counting lead + CI rows.
-const peopleSQL = (role) => `(SELECT grant_id, name_key, MAX(name) name, MIN(role) role FROM investigators
+const peopleSQL = (role) => `(SELECT grant_id, name_key, MAX(name) name, MIN(role) role, MAX(share_aud) share_aud FROM investigators
   ${role ? "WHERE role = 'lead'" : ""} GROUP BY grant_id, name_key)`;
 
 function stackedYears(sel, rows, height = 280) {
@@ -178,6 +178,60 @@ function stackedOrgs(sel, rows, n = 15) {
       tip: { format: { m: ",.1f" } } }), Plot.ruleX([0])],
   });
 }
+
+/* ---------- regions, population, real dollars ---------- */
+const REGION_STATES = { WA: ["WA"], EXWA: STATES.filter((s) => s !== "WA"), AUS: STATES };
+const REGION_LABEL = { WA: "WA", EXWA: "Australia excl. WA", AUS: "Australia" };
+const statesOf = (r) => REGION_STATES[r] || [r];
+const regionName = (r) => REGION_LABEL[r] || r;
+// [sql, ...params] restricting col to the region's states
+const inRegion = (r, col = "g.state") => { const ss = statesOf(r); return [`${col} IN (${ss.map(() => "?").join(",")})`, ...ss]; };
+let POPY = {};   // ABS population: state -> {year: persons}
+let CPI = {};    // ABS CPI: year -> index
+function popAt(st, year) {
+  const s = POPY[st];
+  if (!s || !year) return POP[st];
+  const near = Object.keys(s).map(Number).reduce((a, b) => (Math.abs(b - year) < Math.abs(a - year) ? b : a));
+  return s[near];
+}
+const popOf = (r, year) => d3.sum(statesOf(r), (st) => popAt(st, year));
+// average population over the selected years: per-resident figures for multi-year totals
+function popPeriod(r) { const f = filters(); return d3.mean(d3.range(f.from, f.to + 1), (y) => popOf(r, y)); }
+const popShare = (r) => popPeriod(r) / popPeriod("AUS");
+const CPI_BASE = () => d3.max(Object.keys(CPI).map(Number));
+function realFactor(year) {
+  const ys = Object.keys(CPI).map(Number);
+  if (!ys.length || !year) return 1;
+  const near = ys.reduce((a, b) => (Math.abs(b - year) < Math.abs(a - year) ? b : a));
+  return CPI[CPI_BASE()] / CPI[near];
+}
+const dollarsLabel = () => (Object.keys(CPI).length ? `${CPI_BASE()} dollars` : "nominal dollars");
+
+// Per-resident lines, WA vs rest of Australia. rows: [{year, wa, ex}] totals in dollars.
+function waVsRest(sel, rows, height = 260) {
+  const data = rows.flatMap((r) => [
+    { year: r.year, region: "WA", v: (r.wa || 0) * realFactor(r.year) / popOf("WA", r.year) },
+    { year: r.year, region: "Australia excl. WA", v: (r.ex || 0) * realFactor(r.year) / popOf("EXWA", r.year) },
+  ]);
+  if (!rows.length) return empty(sel);
+  plotInto(sel, {
+    height, x: yearLineX(data), y: { label: `A$ per resident (${dollarsLabel()})`, grid: true, zero: true },
+    color: { domain: ["WA", "Australia excl. WA"], range: [css("--s1"), css("--s2")], legend: true },
+    marks: [
+      Plot.lineY(data, { x: "year", y: "v", stroke: "region", strokeWidth: 2 }),
+      Plot.dot(data, { x: "year", y: "v", fill: "region", r: 2.5 }),
+      Plot.tip(data, Plot.pointer({ x: "year", y: "v", channels: { region: "region" }, format: { y: ",.2f" } })),
+    ],
+  });
+}
+const exStates = () => REGION_STATES.EXWA.map((x) => `'${x}'`).join(",");
+// SELECT fragment giving WA and ex-WA sums of an amount column
+const waExSums = (col = "g.amount_aud", stateCol = "g.state") =>
+  `SUM(CASE WHEN ${stateCol} = 'WA' THEN ${col} END) wa, SUM(CASE WHEN ${stateCol} IN (${exStates()}) THEN ${col} END) ex`;
+
+// Researcher credit: split equally among named investigators, or full grant value
+const creditAmt = () => (filters().credit === "full" ? "g.amount_aud" : "COALESCE(i.share_aud, g.amount_aud)");
+const creditLabel = () => (filters().credit === "full" ? "full grant value" : "split among named investigators");
 
 const yearsLabel = () => { const f = filters(); return `${f.from}–${f.to}`; };
 
@@ -247,53 +301,45 @@ const views = {
         Plot.tip(share, Plot.pointer({ x: "year", y: "share", channels: { source: "source" }, format: { y: ".1%" } })),
       ],
     });
+
+    waVsRest("#ov-pc", q(`SELECT round_year year, ${waExSums()} FROM grants g WHERE ${w} GROUP BY 1`, p));
   },
 
   wa() {
+    const reg = $("#wa-region").value, rn = regionName(reg);
     const sci = ["COALESCE(g.field_group, '') <> 'Humanities & social sciences'"];
-    const [w, p] = where([["g.state = ?", "WA"], sci], { basic: true });
+    const [w, p] = where([inRegion(reg), sci], { basic: true });
     const [wn, pn] = where([sci], { basic: true });
     const t = q(`SELECT COUNT(*) n, SUM(amount_aud) s FROM grants g WHERE ${w}`, p)[0];
     const nat = q(`SELECT SUM(amount_aud) s FROM grants g WHERE ${wn}`, pn)[0].s || 0;
+    $("#wa-year-cap").textContent = `${rn}: basic science funding by year and funder (A$m)`;
+    $("#wa-inst-cap").textContent = `${rn} institutions (A$m, selected years)`;
+    $("#wa-field-cap").textContent = `${rn}: basic science by field of research (A$m, selected years)`;
     tiles("#wa-tiles", [
-      ["WA basic science grants", fmtInt(t.n), yearsLabel()],
+      [`${rn} basic science grants`, fmtInt(t.n), yearsLabel()],
       ["Amount", fmtB(t.s || 0), "ARC Discovery + NHMRC Basic Science"],
-      ["Share of national basic science", nat ? fmtPct((t.s || 0) / nat) : "–", `population share ${fmtPct(POP.WA / POP_TOTAL)}`],
-      ["Per WA resident", d3.format("$,.0f")((t.s || 0) / POP.WA), "over selected years"],
+      ["Share of national basic science", nat ? fmtPct((t.s || 0) / nat) : "–", `population share ${fmtPct(popShare(reg))}`],
+      ["Per resident per year", d3.format("$,.2f")((t.s || 0) / popPeriod(reg) / (filters().to - filters().from + 1)),
+        "nominal, average over selected years"],
     ]);
 
-    const byYear = q(`SELECT round_year year, source, SUM(amount_aud)/1e6 m FROM grants g WHERE ${w} GROUP BY 1,2`, p);
-    if (!byYear.length) empty("#wa-year");
-    else plotInto("#wa-year", {
-      height: 300, x: yearX(), y: { label: "A$m", grid: true },
-      color: colorScale(),
-      marks: [Plot.barY(byYear, { x: "year", y: "m", fill: "source", inset: 1, rx: 2, tip: { format: { m: ",.1f" } } }),
-        Plot.ruleY([0])],
-    });
+    waVsRest("#wa-pc", q(`SELECT round_year year, ${waExSums()} FROM grants g WHERE ${wn} GROUP BY 1`, pn));
+    stackedYears("#wa-year", q(`SELECT round_year year, source, SUM(amount_aud)/1e6 m FROM grants g WHERE ${w} GROUP BY 1,2`, p), 300);
 
     const st = q(`SELECT state, SUM(amount_aud) s FROM grants g WHERE ${wn} AND state IS NOT NULL GROUP BY 1`, pn)
-      .filter((d) => POP[d.state]).map((d) => ({ ...d, percap: d.s / POP[d.state] }));
+      .filter((d) => POP[d.state]).map((d) => ({ ...d, percap: d.s / popPeriod(d.state) }));
+    const inReg = statesOf(reg);
     if (!st.length) empty("#wa-percap");
     else plotInto("#wa-percap", {
-      height: 260, marginLeft: 44, x: { label: "A$ per resident", grid: true },
+      height: 260, marginLeft: 44, x: { label: "A$ per resident, selected years", grid: true },
       y: { label: null, domain: d3.sort(st, (d) => -d.percap).map((d) => d.state) },
       marks: [Plot.barX(st, { y: "state", x: "percap", rx: 2,
-        fill: (d) => d.state === "WA" ? css("--accent") : css("--muted-mark"), tip: { format: { percap: ",.0f", fill: false } } }),
+        fill: (d) => inReg.includes(d.state) ? css("--accent") : css("--muted-mark"), tip: { format: { percap: ",.0f", fill: false } } }),
       Plot.ruleX([0])],
     });
 
-    const inst = q(`SELECT o.name org, g.source, SUM(amount_aud)/1e6 m FROM grants g JOIN organisations o ON o.id=g.org_id
-                    WHERE ${w} GROUP BY 1,2`, p);
-    if (!inst.length) empty("#wa-inst");
-    else {
-      const order = d3.groupSort(inst, (v) => -d3.sum(v, (d) => d.m), (d) => d.org).slice(0, 15);
-      const data = inst.filter((d) => order.includes(d.org));
-      plotInto("#wa-inst", {
-        height: 40 + order.length * 26, ...catY(order, 260), x: { label: "A$m", grid: true },
-        color: colorScale(),
-        marks: [Plot.barX(data, { y: "org", x: "m", fill: "source", rx: 2, inset: 1, tip: { format: { m: ",.1f" } } }), Plot.ruleX([0])],
-      });
-    }
+    stackedOrgs("#wa-inst", q(`SELECT o.name org, g.source, SUM(amount_aud)/1e6 m FROM grants g JOIN organisations o ON o.id=g.org_id
+                               WHERE ${w} GROUP BY 1,2`, p));
 
     const fld = q(`SELECT for_division d, SUM(amount_aud)/1e6 m, COUNT(*) n FROM grants g
                    WHERE ${w} AND for_division IS NOT NULL GROUP BY 1 ORDER BY m DESC LIMIT 15`, p)
@@ -378,7 +424,8 @@ const views = {
     const base = `FROM grants g LEFT JOIN organisations o ON o.id=g.org_id WHERE ${w}`;
     const cnt = q(`SELECT COUNT(*) n, SUM(amount_aud) s ${base}`, p)[0];
     const rows = q(`SELECT g.id, g.source, g.scheme, g.round_year year, g.title, g.lead_investigator lead,
-                    COALESCE(o.name, g.org_raw) org, g.state, g.amount_aud, g.field_group field, g.basic_science basic
+                    COALESCE(o.name, g.org_raw) org, g.state, g.amount_aud, g.team_size team,
+                    g.amount_aud / NULLIF(g.team_size, 0) per_inv, g.field_group field, g.basic_science basic
                     ${base} ORDER BY g.amount_aud DESC LIMIT ${limit}`, p);
     if (limit > 500) return rows;
     $("#s-count").textContent = `${fmtInt(cnt.n)} grants, ${fmtB(cnt.s || 0)}. ` +
@@ -387,6 +434,7 @@ const views = {
       { key: "id", label: "ID" }, { key: "year", label: "Year" }, { key: "scheme", label: "Scheme" },
       { key: "title", label: "Title" }, { key: "lead", label: "Lead investigator" }, { key: "org", label: "Organisation" },
       { key: "state", label: "State" }, { label: "Amount", n: 1, f: (r) => fmtM(r.amount_aud) },
+      { label: "Team", n: 1, f: (r) => r.team || "" }, { label: "Per investigator", n: 1, f: (r) => fmtM(r.per_inv) },
       { label: "Basic", f: (r) => r.basic ? "yes" : "" },
     ], "id");
   },
@@ -416,25 +464,29 @@ const views = {
   },
 
   bio() {
-    const topic = $("#bio-topic").value, st = $("#bio-state").value, ms = methodSQL();
+    const topic = $("#bio-topic").value, reg = $("#bio-state").value, ms = methodSQL();
+    const st = regionName(reg), inReg = statesOf(reg);
+    const [rs, ...rv] = inRegion(reg);
     const [w, p] = where([], { topic: null });
     const [wt, pt] = where([topicClause(topic)], { topic: null });
     $("#bio-share-cap").textContent = `${st} share of national funding in each topic (bars) against ${st} share of population (dashed line)`;
     $("#bio-trend-cap").textContent = `${topic} in ${st}, by year and funder (A$m)`;
-    $("#bio-inst-cap").textContent = `Top ${st} institutions in ${topic} (A$m, selected years)`;
-    $("#bio-people-cap").textContent = `Top ${st} researchers in ${topic} (selected years)`;
+    $("#bio-pc-cap").textContent = `${topic}: A$ per resident by year, WA against the rest of Australia (${dollarsLabel()})`;
+    $("#bio-inst-cap").textContent = `Top institutions in ${st}: ${topic} (A$m, selected years)`;
+    $("#bio-people-cap").textContent = `Top researchers in ${st}: ${topic} (selected years, ${creditLabel()})`;
 
-    const nat = q(`SELECT COUNT(*) n, SUM(amount_aud) s, SUM(CASE WHEN state=? THEN amount_aud END) st,
-                   SUM(CASE WHEN state=? THEN 1 ELSE 0 END) stn FROM grants g WHERE ${wt}`, [st, st, ...pt])[0];
+    const nat = q(`SELECT COUNT(*) n, SUM(amount_aud) s, SUM(CASE WHEN ${rs} THEN amount_aud END) st,
+                   SUM(CASE WHEN ${rs} THEN 1 ELSE 0 END) stn FROM grants g WHERE ${wt}`, [...rv, ...rv, ...pt])[0];
     const byState = q(`SELECT state, SUM(amount_aud) s FROM grants g WHERE ${wt} AND state IS NOT NULL GROUP BY 1`, pt)
-      .filter((d) => POP[d.state]).map((d) => ({ ...d, percap: d.s / POP[d.state] }));
-    const rank = d3.sort(byState, (d) => -d.percap).findIndex((d) => d.state === st) + 1;
+      .filter((d) => POP[d.state]).map((d) => ({ ...d, percap: d.s / popPeriod(d.state) }));
+    const rank = inReg.length === 1 ? d3.sort(byState, (d) => -d.percap).findIndex((d) => d.state === reg) + 1 : 0;
     tiles("#bio-tiles", [
       [`${topic} grants in ${st}`, fmtInt(nat.stn || 0), yearsLabel()],
       ["Amount", fmtB(nat.st || 0), `of ${fmtB(nat.s || 0)} nationally`],
-      [`${st} share`, nat.s ? fmtPct((nat.st || 0) / nat.s) : "–", `population share ${fmtPct(POP[st] / POP_TOTAL)}`],
-      ["Per resident", d3.format("$,.2f")((nat.st || 0) / POP[st]), rank ? `rank ${rank} of ${byState.length} states` : ""],
+      [`${st} share`, nat.s ? fmtPct((nat.st || 0) / nat.s) : "–", `population share ${fmtPct(popShare(reg))}`],
+      ["Per resident", d3.format("$,.2f")((nat.st || 0) / popPeriod(reg)), rank ? `rank ${rank} of ${byState.length} states` : "selected years"],
     ]);
+    waVsRest("#bio-pc", q(`SELECT round_year year, ${waExSums()} FROM grants g WHERE ${wt} GROUP BY 1`, pt));
 
     const heat = q(`SELECT t.topic, g.round_year year, SUM(g.amount_aud)/1e6 m, COUNT(*) n FROM grants g
                     JOIN grant_topics t ON t.grant_id = g.id${ms} WHERE ${w} GROUP BY 1, 2`, p);
@@ -446,8 +498,8 @@ const views = {
         channels: { n: { value: "n", label: "grants" } } })],
     });
 
-    const share = q(`SELECT t.topic, SUM(g.amount_aud) s, SUM(CASE WHEN g.state=? THEN g.amount_aud ELSE 0 END) st
-                     FROM grants g JOIN grant_topics t ON t.grant_id = g.id${ms} WHERE ${w} GROUP BY 1`, [st, ...p])
+    const share = q(`SELECT t.topic, SUM(g.amount_aud) s, SUM(CASE WHEN ${rs} THEN g.amount_aud ELSE 0 END) st
+                     FROM grants g JOIN grant_topics t ON t.grant_id = g.id${ms} WHERE ${w} GROUP BY 1`, [...rv, ...p])
       .map((d) => ({ ...d, share: d.s ? d.st / d.s : 0 }));
     if (!share.length) empty("#bio-share");
     else plotInto("#bio-share", {
@@ -455,29 +507,29 @@ const views = {
       marks: [
         Plot.barX(share, { y: "topic", x: "share", rx: 2, tip: { format: { share: ".1%", fill: false } },
           fill: (d) => d.topic === topic ? css("--accent") : css("--muted-mark") }),
-        Plot.ruleX([POP[st] / POP_TOTAL], { stroke: css("--ink"), strokeDasharray: "4 3" }),
+        Plot.ruleX([popShare(reg)], { stroke: css("--ink"), strokeDasharray: "4 3" }),
         Plot.ruleX([0]),
       ],
     });
 
     stackedYears("#bio-trend", q(`SELECT round_year year, source, SUM(amount_aud)/1e6 m FROM grants g
-                                  WHERE ${wt} AND g.state = ? GROUP BY 1, 2`, [...pt, st]));
+                                  WHERE ${wt} AND ${rs} GROUP BY 1, 2`, [...pt, ...rv]));
 
     if (!byState.length) empty("#bio-percap");
     else plotInto("#bio-percap", {
       height: 260, marginLeft: 44, x: { label: "A$ per resident", grid: true },
       y: { label: null, domain: d3.sort(byState, (d) => -d.percap).map((d) => d.state) },
       marks: [Plot.barX(byState, { y: "state", x: "percap", rx: 2, tip: { format: { percap: ",.2f", fill: false } },
-        fill: (d) => d.state === st ? css("--accent") : css("--muted-mark") }), Plot.ruleX([0])],
+        fill: (d) => inReg.includes(d.state) ? css("--accent") : css("--muted-mark") }), Plot.ruleX([0])],
     });
 
     stackedOrgs("#bio-inst", q(`SELECT o.name org, g.source, SUM(amount_aud)/1e6 m FROM grants g
-                                JOIN organisations o ON o.id = g.org_id WHERE ${wt} AND g.state = ? GROUP BY 1, 2`, [...pt, st]));
+                                JOIN organisations o ON o.id = g.org_id WHERE ${wt} AND ${rs} GROUP BY 1, 2`, [...pt, ...rv]));
 
-    table("#bio-people", q(`SELECT i.name_key k, MAX(i.name) name, COUNT(*) n, SUM(g.amount_aud) s,
+    table("#bio-people", q(`SELECT i.name_key k, MAX(i.name) name, COUNT(*) n, SUM(${creditAmt()}) s,
                             MIN(g.round_year) y0, MAX(g.round_year) y1, GROUP_CONCAT(DISTINCT COALESCE(o.name, g.org_raw)) orgs
                             FROM ${peopleSQL()} i JOIN grants g ON g.id = i.grant_id LEFT JOIN organisations o ON o.id = g.org_id
-                            WHERE ${wt} AND g.state = ? GROUP BY 1 ORDER BY s DESC LIMIT 25`, [...pt, st]), [
+                            WHERE ${wt} AND ${rs} GROUP BY 1 ORDER BY s DESC LIMIT 25`, [...pt, ...rv]), [
       { label: "Researcher", f: (r) => who(r.k, r.name) }, { label: "Grants", n: 1, f: (r) => fmtInt(r.n) },
       { label: "Total", n: 1, f: (r) => fmtM(r.s) }, { label: "Years", n: 1, f: (r) => `${r.y0}–${r.y1}` },
       { label: "Organisations", f: (r) => orgList(r.orgs) },
@@ -487,7 +539,7 @@ const views = {
                             (SELECT name_key FROM investigators WHERE grant_id = g.id AND role = 'lead') k,
                             COALESCE(o.name, g.org_raw) org, g.amount_aud
                             FROM grants g LEFT JOIN organisations o ON o.id = g.org_id
-                            WHERE ${wt} AND g.state = ? ORDER BY g.amount_aud DESC LIMIT 25`, [...pt, st]), [
+                            WHERE ${wt} AND ${rs} ORDER BY g.amount_aud DESC LIMIT 25`, [...pt, ...rv]), [
       { key: "year", label: "Year" }, { key: "scheme", label: "Scheme" }, { key: "title", label: "Title" },
       { label: "Lead", f: (r) => who(r.k, r.lead) }, { key: "org", label: "Organisation" },
       { label: "Amount", n: 1, f: (r) => fmtM(r.amount_aud) },
@@ -500,19 +552,20 @@ const views = {
     if (personKey) return views.profile(personKey);
     const extra = [];
     const st = $("#p-state").value, role = $("#p-role").value, s = $("#p-q").value.trim();
-    if (st) extra.push(["g.state = ?", st]);
+    if (st) extra.push(inRegion(st));
     if (s) extra.push(["(i.name LIKE ? OR i.name_key LIKE ?)", `%${s}%`, `%${s.toLowerCase()}%`]);
     const [w, p] = where(extra);
     const f = filters();
-    $("#p-board-cap").textContent = `Most funded researchers${st ? ` on ${st} grants` : ""}${f.topic ? ` in ${f.topic}` : ""}, ${yearsLabel()}` +
-      `${role ? " (lead only)" : ""}. Click a name for their profile.`;
-    table("#p-board", q(`SELECT i.name_key k, MAX(i.name) name, COUNT(*) n, SUM(g.amount_aud) s,
+    $("#p-board-cap").textContent = `Most funded researchers${st ? ` on ${regionName(st)} grants` : ""}${f.topic ? ` in ${f.topic}` : ""}, ${yearsLabel()}` +
+      `${role ? " (lead only)" : ""}, ${creditLabel()}. Click a name for their profile.`;
+    table("#p-board", q(`SELECT i.name_key k, MAX(i.name) name, COUNT(*) n, SUM(${creditAmt()}) s, SUM(g.amount_aud) fullv,
                          SUM(CASE WHEN i.role = 'lead' THEN 1 ELSE 0 END) led, MIN(g.round_year) y0, MAX(g.round_year) y1,
                          GROUP_CONCAT(DISTINCT g.source) funders, GROUP_CONCAT(DISTINCT COALESCE(o.name, g.org_raw)) orgs
                          FROM ${peopleSQL(role)} i JOIN grants g ON g.id = i.grant_id LEFT JOIN organisations o ON o.id = g.org_id
                          WHERE ${w} GROUP BY 1 ORDER BY s DESC LIMIT 100`, p), [
       { label: "Researcher", f: (r) => who(r.k, r.name) }, { label: "Grants", n: 1, f: (r) => fmtInt(r.n) },
-      { label: "As lead", n: 1, f: (r) => fmtInt(r.led) }, { label: "Total", n: 1, f: (r) => fmtM(r.s) },
+      { label: "As lead", n: 1, f: (r) => fmtInt(r.led) }, { label: "Credited", n: 1, f: (r) => fmtM(r.s) },
+      { label: "Full value of grants", n: 1, f: (r) => fmtM(r.fullv) },
       { label: "Years", n: 1, f: (r) => `${r.y0}–${r.y1}` }, { label: "Funders", f: (r) => esc((r.funders || "").split(",").join(", ")) }, { label: "Organisations", f: (r) => orgList(r.orgs) },
     ]);
   },
@@ -520,7 +573,8 @@ const views = {
   profile(key, csv) {
     const [w, p] = where([["i.name_key = ?", key]]);
     const grants = q(`SELECT g.id, g.round_year year, g.source, g.scheme, g.title, i.role, g.lead_investigator lead,
-                      COALESCE(o.name, g.org_raw) org, g.state, g.amount_aud, g.basic_science basic
+                      COALESCE(o.name, g.org_raw) org, g.state, g.amount_aud, g.team_size team, ${creditAmt()} credit,
+                      g.basic_science basic
                       FROM ${peopleSQL()} i JOIN grants g ON g.id = i.grant_id LEFT JOIN organisations o ON o.id = g.org_id
                       WHERE ${w} ORDER BY g.round_year DESC, g.amount_aud DESC`, p);
     if (csv) return grants;
@@ -530,15 +584,15 @@ const views = {
     const yrs = grants.map((g) => g.year).filter(Boolean);
     tiles("#p-tiles", [
       ["Grants", fmtInt(grants.length), `${grants.filter((g) => g.role === "lead").length} as lead`],
-      ["Total awarded", fmtB(d3.sum(grants, (g) => g.amount_aud)), "full grant value, shared with co-investigators"],
+      ["Credited", fmtB(d3.sum(grants, (g) => g.credit)), `${creditLabel()}; full value ${fmtB(d3.sum(grants, (g) => g.amount_aud))}`],
       ["Active", yrs.length ? `${d3.min(yrs)}–${d3.max(yrs)}` : "–", "within selected years and funders"],
       ["Organisations", fmtInt(orgs.length), orgs.slice(0, 2).join("; ") + (orgs.length > 2 ? "…" : "")],
     ]);
-    stackedYears("#p-year", d3.rollups(grants, (v) => d3.sum(v, (g) => g.amount_aud) / 1e6, (g) => g.year, (g) => g.source)
+    stackedYears("#p-year", d3.rollups(grants, (v) => d3.sum(v, (g) => g.credit) / 1e6, (g) => g.year, (g) => g.source)
       .flatMap(([year, xs]) => xs.map(([source, m]) => ({ year, source, m }))), 240);
 
     const ms = methodSQL();
-    const tops = q(`SELECT t.topic, SUM(g.amount_aud)/1e6 m, COUNT(*) n FROM ${peopleSQL()} i JOIN grants g ON g.id = i.grant_id
+    const tops = q(`SELECT t.topic, SUM(${creditAmt()})/1e6 m, COUNT(*) n FROM ${peopleSQL()} i JOIN grants g ON g.id = i.grant_id
                     JOIN grant_topics t ON t.grant_id = g.id${ms} WHERE ${w} GROUP BY 1 ORDER BY m DESC`, p);
     if (!tops.length) empty("#p-topics", "No biology topics tagged on these grants.");
     else plotInto("#p-topics", {
@@ -556,7 +610,8 @@ const views = {
     table("#p-grants", grants.slice(0, 200), [
       { key: "year", label: "Year" }, { key: "source", label: "Funder" }, { key: "scheme", label: "Scheme" },
       { key: "title", label: "Title" }, { key: "role", label: "Role" }, { key: "org", label: "Organisation" },
-      { label: "Amount", n: 1, f: (r) => fmtM(r.amount_aud) }, { label: "Basic", f: (r) => r.basic ? "yes" : "" },
+      { label: "Grant value", n: 1, f: (r) => fmtM(r.amount_aud) }, { label: "Team", n: 1, f: (r) => r.team || "" },
+      { label: "Credited", n: 1, f: (r) => fmtM(r.credit) }, { label: "Basic", f: (r) => r.basic ? "yes" : "" },
     ], "id");
   },
 
@@ -569,12 +624,15 @@ const views = {
     const tot = q(`SELECT SUM(b.amount_aud) s, SUM(CASE WHEN o.state='WA' THEN b.amount_aud END) wa ${base}`, yr)[0];
     const last = q(`SELECT MAX(b.year) y ${base}`, yr)[0].y;
     const lastWA = last ? q(`SELECT SUM(b.amount_aud) s ${base} AND b.year = ? AND o.state = 'WA'`, [...yr, last])[0].s : null;
+    const nyrs = f.to - f.from + 1;
     tiles("#blk-tiles", [
       ["National block grants", fmtB(tot.s || 0), yearsLabel()],
-      ["To WA universities", fmtB(tot.wa || 0), yearsLabel()],
-      ["WA share", tot.s ? fmtPct((tot.wa || 0) / tot.s) : "–", `population share ${fmtPct(POP.WA / POP_TOTAL)}`],
-      [`WA in ${last || "latest year"}`, lastWA ? fmtM(lastWA) : "–", "all WA universities"],
+      ["To WA universities", fmtB(tot.wa || 0), `WA share ${tot.s ? fmtPct((tot.wa || 0) / tot.s) : "–"}, population ${fmtPct(popShare("WA"))}`],
+      ["WA per resident per year", d3.format("$,.2f")((tot.wa || 0) / popPeriod("WA") / nyrs), "nominal, selected years"],
+      ["Rest of Australia per resident per year", d3.format("$,.2f")(((tot.s || 0) - (tot.wa || 0)) / popPeriod("EXWA") / nyrs),
+        `WA in ${last || "latest year"}: ${lastWA ? fmtM(lastWA) : "–"}`],
     ]);
+    waVsRest("#blk-pc", q(`SELECT b.year, ${waExSums("b.amount_aud", "o.state")} ${base} GROUP BY 1`, yr));
 
     const byYear = q(`SELECT b.year, ${grp} program, SUM(b.amount_aud)/1e6 m ${base} GROUP BY 1, 2`, yr);
     const progs = ["RTP", "RSP", "Earlier schemes"];
@@ -622,7 +680,7 @@ const views = {
     else plotInto("#blk-share", {
       height: 240, x: yearLineX(share), y: { label: "WA share", tickFormat: "%", grid: true, zero: true },
       marks: [
-        Plot.ruleY([POP.WA / POP_TOTAL], { stroke: css("--ink-3"), strokeDasharray: "4 4" }),
+        Plot.ruleY([popShare("WA")], { stroke: css("--ink-3"), strokeDasharray: "4 4" }),
         Plot.lineY(share, { x: "year", y: "share", stroke: css("--accent"), strokeWidth: 2, tip: { format: { y: ".1%" } } }),
       ],
     });
@@ -633,7 +691,8 @@ const views = {
                        SUM(CASE WHEN ${grp} = 'RTP' THEN b.amount_aud END) rtp,
                        SUM(CASE WHEN ${grp} = 'RSP' THEN b.amount_aud END) rsp
                        ${base} GROUP BY 1 ORDER BY blk DESC`, yr)
-      .map((r) => ({ ...r, comp: comp.get(r.id) || 0, ratio: comp.get(r.id) ? r.blk / comp.get(r.id) : null }));
+      .map((r) => ({ ...r, comp: comp.get(r.id) || 0, ratio: comp.get(r.id) ? r.blk / comp.get(r.id) : null }))
+      .filter((r) => !$("#blk-region").value || statesOf($("#blk-region").value).includes(r.state));
     unisAll.forEach((r, i) => { r.rank = i + 1; });
     table("#blk-table", unisAll, [
       { label: "#", n: 1, f: (r) => r.rank }, { label: "University", f: (r) => r.state === "WA" ? `<b>${esc(r.name)}</b>` : esc(r.name) },
@@ -641,6 +700,79 @@ const views = {
       { label: "RTP", n: 1, f: (r) => fmtM(r.rtp) }, { label: "RSP", n: 1, f: (r) => fmtM(r.rsp) },
       { label: "Competitive grants", n: 1, f: (r) => fmtM(r.comp) },
       { label: "Block / competitive", n: 1, f: (r) => r.ratio == null ? "–" : d3.format(".2f")(r.ratio) },
+    ]);
+  },
+
+  async trends() {
+    if (!views._analysis) {
+      views._analysis = await fetch("data/analysis.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    }
+    const a = views._analysis;
+    if (!a) { $("#tr-findings").innerHTML = '<p class="note">Trend analysis not available yet.</p>'; return; }
+    const m = a.meta;
+    $("#tr-meta").textContent = `Basic science = ARC Discovery program + NHMRC Basic Science, excluding humanities and social sciences. ` +
+      `Complete years to ${m.last_complete_year}; trend window ${m.window ? m.window.join("–") : "n/a"}. ` +
+      `${m.real_dollars ? `Amounts in ${m.base_year} dollars (ABS CPI)` : "Nominal dollars (CPI unavailable)"}; ` +
+      `per resident ${m.population_by_year ? "uses each year's ABS population" : "uses 2024 population"}.`;
+    $("#tr-findings").innerHTML = `<ul>${a.findings.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>`;
+
+    const lab = { WA: "WA", EXWA: "Australia excl. WA" };
+    const col = { domain: ["WA", "Australia excl. WA"], range: [css("--s1"), css("--s2")], legend: true };
+    const lines = (sel, key, label, fmt = ",.2f", src = a.series) => {
+      const data = Object.entries(src).flatMap(([r, xs]) => xs.map((e) => ({ year: e.year, region: lab[r], v: e[key] })))
+        .filter((d) => d.v != null);
+      if (!data.length) return empty(sel);
+      plotInto(sel, {
+        height: 260, x: yearLineX(data), y: { label, grid: true, zero: true }, color: col,
+        marks: [Plot.lineY(data, { x: "year", y: "v", stroke: "region", strokeWidth: 2 }),
+          Plot.dot(data, { x: "year", y: "v", fill: "region", r: 2.5 }),
+          Plot.tip(data, Plot.pointer({ x: "year", y: "v", channels: { region: "region" }, format: { y: fmt } }))],
+      });
+    };
+    const dl = m.real_dollars ? `${m.base_year} dollars` : "nominal";
+    lines("#tr-pc", "per_capita_real", `A$ per resident (${dl})`);
+    lines("#tr-grants", "grants", "grants per year", ",d");
+    lines("#tr-mean", "mean_grant_real", `average grant, A$ (${dl})`, "$,.0f");
+    lines("#tr-team", "arc_team", "average named investigators per ARC grant", ".2f");
+    lines("#tr-perinv", "per_investigator_real", `A$ per named investigator, ARC (${dl})`, "$,.0f", a.per_investigator);
+
+    const sh = a.share.filter((d) => d.wa_share != null);
+    if (!sh.length) empty("#tr-share");
+    else plotInto("#tr-share", {
+      height: 240, x: yearLineX(sh), y: { label: "WA share of national basic science", tickFormat: "%", grid: true, zero: true },
+      marks: [Plot.ruleY([POP.WA / POP_TOTAL], { stroke: css("--ink-3"), strokeDasharray: "4 4" }),
+        Plot.lineY(sh, { x: "year", y: "wa_share", stroke: css("--accent"), strokeWidth: 2, tip: { format: { y: ".1%" } } })],
+    });
+
+    const tp = a.topics.flatMap((t) => [
+      { topic: t.topic, region: "WA", v: t.WA_change }, { topic: t.topic, region: "Australia excl. WA", v: t.EXWA_change },
+    ]).filter((d) => d.v != null && isFinite(d.v));
+    if (!tp.length) empty("#tr-topics");
+    else {
+      const order = a.topics.map((t) => t.topic);
+      plotInto("#tr-topics", {
+        height: 40 + order.length * 30, ...catY(order, 250),
+        x: { label: "change per resident, second half of window vs first", tickFormat: "+.0%", grid: true },
+        color: col,
+        marks: [Plot.ruleX([0]),
+          Plot.ruleY(a.topics, { y: "topic", x1: "WA_change", x2: "EXWA_change", stroke: css("--line"), strokeWidth: 2 }),
+          Plot.dot(tp, { y: "topic", x: "v", fill: "region", r: 5, tip: { format: { v: "+.1%" } } })],
+      });
+    }
+    table("#tr-topic-tbl", a.topics, [
+      { key: "topic", label: "Topic" },
+      { label: "WA per resident, early", n: 1, f: (r) => d3.format("$.2f")(r.WA_early) },
+      { label: "WA, recent", n: 1, f: (r) => d3.format("$.2f")(r.WA_late) },
+      { label: "WA change", n: 1, f: (r) => (r.WA_change == null ? "–" : d3.format("+.0%")(r.WA_change)) },
+      { label: "Rest, early", n: 1, f: (r) => d3.format("$.2f")(r.EXWA_early) },
+      { label: "Rest, recent", n: 1, f: (r) => d3.format("$.2f")(r.EXWA_late) },
+      { label: "Rest change", n: 1, f: (r) => (r.EXWA_change == null ? "–" : d3.format("+.0%")(r.EXWA_change)) },
+      { label: "WA vs rest, recent", n: 1, f: (r) => (r.EXWA_late ? d3.format(".2f")(r.WA_late / r.EXWA_late) + "×" : "–") },
+    ]);
+    table("#tr-inst", a.institutions.slice(0, 15), [
+      { key: "org", label: "WA institution" }, { label: "Previous 5 years", n: 1, f: (r) => fmtM(r.prev5) },
+      { label: "Last 5 years", n: 1, f: (r) => fmtM(r.last5) },
+      { label: "Change", n: 1, f: (r) => (r.change == null ? "new" : d3.format("+.0%")(r.change)) },
     ]);
   },
 
@@ -694,6 +826,7 @@ async function openGrant(id) {
   $("#gd-body").innerHTML = `
     <div class="gd-amount">${g.amount_aud != null ? d3.format("$,.0f")(g.amount_aud) : "Amount not published"}</div>
     <dl class="gd">
+      ${row("Per investigator", g.team_size ? `${d3.format("$,.0f")(g.amount_aud / g.team_size)} <span class="note">(${g.team_size} named${g.source === "ARC" ? "" : "; this funder publishes the lead only"})</span>` : null)}
       ${row("Grant ID", esc(g.id.split(":").slice(1).join(":")))}
       ${row("Funder", esc(g.source))}
       ${row("Scheme", esc(g.scheme))}
@@ -728,6 +861,7 @@ function show(tab) {
   $("#filters").hidden = !FILTER_TABS.has(tab);
   $("#f-basic").parentElement.hidden = tab === "wa";
   $("#f-topic-wrap").hidden = tab === "bio" || tab === "blocks";
+  $("#f-credit-wrap").hidden = !(tab === "bio" || tab === "people");
   // block grants are formula funding: only the year range applies (funders feed the comparison column)
   ["#f-field-wrap", "#f-kw-wrap"].forEach((s) => { $(s).hidden = tab === "blocks"; });
   if (tab === "blocks") $("#f-basic").parentElement.hidden = true;
@@ -736,7 +870,7 @@ function show(tab) {
 }
 
 function render() {
-  try { views[current](); } catch (e) { console.error(e); }
+  try { const r = views[current](); if (r && r.catch) r.catch((e) => console.error(e)); } catch (e) { console.error(e); }
 }
 
 function runSQL(forCsv) {
@@ -776,9 +910,17 @@ async function init() {
     $("#f-sources").append(l);
   });
   for (const r of q("SELECT DISTINCT field_group f FROM grants WHERE f IS NOT NULL ORDER BY 1")) $("#f-field").add(new Option(r.f, r.f));
+  for (const sel of ["#bio-state", "#p-state"]) {
+    $(sel).add(new Option("Australia excl. WA", "EXWA"));
+    if (sel === "#bio-state") $(sel).add(new Option("Australia", "AUS"));
+  }
   STATES.forEach((s) => {
     $("#s-state").add(new Option(s, s)); $("#bio-state").add(new Option(s, s)); $("#p-state").add(new Option(s, s));
   });
+  try {
+    for (const r of q("SELECT state, year, persons FROM population")) (POPY[r.state] ||= {})[r.year] = r.persons;
+    for (const r of q("SELECT year, idx FROM cpi")) CPI[r.year] = r.idx;
+  } catch (e) { /* older database without ABS tables */ }
   const present_topics = new Set(q("SELECT DISTINCT topic FROM grant_topics").map((r) => r.topic));
   TOPICS.filter((t) => present_topics.has(t)).forEach((t) => {
     $("#f-topic").add(new Option(t, t)); $("#bio-topic").add(new Option(t, t));
@@ -797,7 +939,7 @@ async function init() {
   let timer;
   document.querySelectorAll("#filters select, #filters input").forEach((el) => el.addEventListener("change", render));
   $("#inst-pick").addEventListener("change", render);
-  ["#bio-topic", "#bio-state", "#p-state", "#p-role"].forEach((s) => $(s).addEventListener("change", render));
+  ["#bio-topic", "#bio-state", "#p-state", "#p-role", "#wa-region", "#blk-region"].forEach((s) => $(s).addEventListener("change", render));
   $("#p-q").addEventListener("input", () => { personKey = null; clearTimeout(timer); timer = setTimeout(render, 250); });
   document.addEventListener("keydown", (e) => {
     const row = e.target.closest && e.target.closest("tr[data-grant]");

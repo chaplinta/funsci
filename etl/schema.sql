@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS grants (
   for_division TEXT,                  -- 2-digit FoR division
   research_area TEXT,                 -- NHMRC broad research area etc.
   field_group TEXT,                   -- Natural sciences | Engineering & IT | Health & medical | HASS
-  basic_science INTEGER NOT NULL DEFAULT 0
+  basic_science INTEGER NOT NULL DEFAULT 0,
+  team_size INTEGER                   -- distinct people named (ARC: all CIs; others: lead only)
 );
 CREATE INDEX IF NOT EXISTS grants_year ON grants(round_year);
 CREATE INDEX IF NOT EXISTS grants_state ON grants(state);
@@ -89,6 +90,11 @@ CREATE TABLE IF NOT EXISTS investigators (
   name TEXT,
   name_key TEXT,
   role TEXT,                          -- lead | CI | PI ...
+  share_aud REAL,                     -- grant amount / number of distinct people named on the grant
   PRIMARY KEY (grant_id, name_key, role)
 );
 CREATE INDEX IF NOT EXISTS investigators_key ON investigators(name_key);
+
+-- ABS estimated resident population (June) and CPI (annual average index), for per-capita and real dollars.
+CREATE TABLE IF NOT EXISTS population (state TEXT, year INTEGER, persons REAL, PRIMARY KEY (state, year));
+CREATE TABLE IF NOT EXISTS cpi (year INTEGER PRIMARY KEY, idx REAL);

@@ -117,3 +117,7 @@ dl.gd dd { margin: 0; }
   dl.gd { grid-template-columns: 1fr; gap: 2px; }
   dl.gd dd { margin-bottom: 8px; }
 }
+
+.explain h2 { margin-top: 0; }
+.explain p { margin: 8px 0; }
+#tr-findings li, #tr-notes li { margin-bottom: 8px; }

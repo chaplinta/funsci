@@ -48,6 +48,7 @@ jobs:
           for s in m["sources"]:
               print(f"| {s['name']} | {s['status']} | {s['rows']} | {(s['note'] or '').replace('|', '/')} |")
           PY
+          [ -f build/out/analysis.md ] && cat build/out/analysis.md >> "$GITHUB_STEP_SUMMARY" || true
       - name: Upload ETL diagnostics
         if: always()
         uses: actions/upload-artifact@v4

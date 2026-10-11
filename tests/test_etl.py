@@ -64,6 +64,9 @@ def offline(monkeypatch, tmp_path):
     monkeypatch.setattr(nhmrc, "LANDING", ["nhmrc"])
     monkeypatch.setattr(mrff, "LANDING", [])
     monkeypatch.setattr(crc, "PROGRAMS", {})
+    from etl.sources import abs as absrc
+    monkeypatch.setattr(absrc, "CPI_URLS", [])
+    monkeypatch.setattr(absrc, "ERP_URLS", [])
     monkeypatch.setattr(education, "RBG_LANDING", ["rbg"])
     monkeypatch.setattr(education, "HERDC_LANDING", ["herdc"])
     return tmp_path
@@ -142,7 +145,7 @@ def test_archive_fallback(monkeypatch, tmp_path):
     import requests
     calls = []
 
-    def fake_get(url, retries):
+    def fake_get(url, retries, headers=None):
         calls.append(url)
         if "web.archive.org" not in url:
             raise requests.Timeout("stalled")
@@ -223,3 +226,41 @@ def test_arc_title_and_team():
         "lead-investigator": "Prof Jane Smith", "investigators": "Prof Jane Smith, Dr John Doe"}})
     assert (g["title"], g["summary"], g["basic_science"]) == ("Evolution of spiders", "This project will study webs.", 1)
     assert g["investigators"] == [("Prof Jane Smith", "CI"), ("Dr John Doe", "CI")]
+
+
+def test_share_split(offline, monkeypatch):
+    fix = json.loads((FIX / "arc_page.json").read_text())
+    fix["data"][0]["attributes"]["investigators"] = "Prof Jane Smith; Dr John Doe; Dr Kim Lee"
+    monkeypatch.setattr(arc, "fetch", lambda url, **_: json.dumps(fix))
+    db = run.build(offline / "build")
+    c = sqlite3.connect(db)
+    rows = c.execute("SELECT name_key, role, share_aud FROM investigators WHERE grant_id='ARC:DP200100001' "
+                     "ORDER BY name_key, role").fetchall()
+    # lead Jane Smith also appears as CI: still 3 distinct people, 450k / 3 each
+    assert {r[2] for r in rows} == {150000.0}
+    assert c.execute("SELECT team_size FROM grants WHERE id='ARC:DP200100001'").fetchone()[0] == 3
+
+
+def test_abs_parsers():
+    from etl.sources import abs as absrc
+    cpi = absrc.parse_cpi(pd.read_csv(FIX / "abs_cpi.csv", dtype=str))
+    assert cpi == [(2023, 133.0), (2024, 138.0)]  # latest partial year kept
+    erp = absrc.parse_erp(pd.read_csv(FIX / "abs_erp.csv", dtype=str))
+    assert sorted(erp) == [("NSW", 2023, 8339300.0), ("WA", 2023, 2878600.0)]
+
+
+def test_trend_maths():
+    from etl import analysis
+    g = analysis.growth([2015, 2016, 2017, 2018], [100, 110, 121, 133.1])
+    assert abs(g - 0.10) < 1e-6
+    # 2024 round half-announced: last complete year is 2023
+    counts = {2019: 100, 2020: 104, 2021: 98, 2022: 101, 2023: 99, 2024: 40}
+    assert analysis.last_complete_year(counts) == 2023
+
+
+def test_analysis_runs(offline):
+    from etl import analysis
+    db = run.build(offline / "build")
+    r, md = analysis.run(db, offline, offline / "a.md")
+    assert r["findings"] and "Basic science funding trends" in md
+    assert (offline / "analysis.json").exists()
