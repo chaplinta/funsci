@@ -188,7 +188,7 @@ def classify_topics(for_code, *texts):
 
 
 TITLES = re.compile(
-    r"\b(emeritus|professor|prof|associate|assoc|a/prof|asst|assistant|adjunct|scientia|laureate|"
+    r"\b(emeritus|professor|prof|associate|assoc|a/prof|a/pr|asst|assistant|adjunct|scientia|laureate|"
     r"dr|doctor|mr|mrs|ms|miss|mx|sir|dame|hon|ao|ac|am|frs|faa|fts)\b\.?", re.I)
 
 
@@ -212,10 +212,13 @@ def clean_person(name):
 
 # Role, office and organisation words that show a "name" isn't a person (e.g. "Research Admin Officer").
 # "Grant" alone is a real name, so only the plural is listed.
-NOT_PERSON = re.compile(
+# Role words can be surnames ("Prof David Officer", "Dr Robert Center"), so they only count when the
+# name has no personal title. Organisation words disqualify regardless.
+ROLE_WORDS = re.compile(
     r"\b(admin|administration|administrator|officer|office|manager|coordinator|research services|grants|"
-    r"secretariat|chief executive|ceo|universit(y|ies)|institute|centre|center|council|department|foundation|"
-    r"pty|ltd|limited|inc|csiro|hospital|health service|committee|team|group|consortium|network)\b", re.I)
+    r"secretariat|chief executive|ceo|centre|center|council|department|committee|team|group|network)\b", re.I)
+ORG_WORDS = re.compile(
+    r"\b(universit(y|ies)|institute|foundation|pty|ltd|limited|inc|csiro|hospital|health service|consortium)\b", re.I)
 PLACEHOLDER = re.compile(
     r"^\W*(n/?a|nil|none|null|tba|tbc|tbd|unknown|various|not applicable|not provided|confidential|"
     r"withheld|redacted|director|investigator|chief investigator|-+)\W*$", re.I)
@@ -226,13 +229,14 @@ def is_person(name):
     if not name or not re.search(r"[A-Za-z]", str(name)):
         return False
     raw = str(name).strip()
-    if PLACEHOLDER.match(raw) or NOT_PERSON.search(raw):
+    titled = bool(TITLES.search(raw))
+    if PLACEHOLDER.match(raw) or ORG_WORDS.search(raw) or (not titled and ROLE_WORDS.search(raw)):
         return False
     cleaned = clean_person(raw)
     if not cleaned:
         return False
     # a lone word is only a person if it came with a title ("Dr Smith"), not "Officer"
-    return len(cleaned.split()) > 1 or bool(TITLES.search(raw))
+    return len(cleaned.split()) > 1 or titled
 
 
 def person_key(name):

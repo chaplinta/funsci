@@ -37,13 +37,19 @@ def _year_pages(landing, kind):
 
 def _files(kind, landing, want):
     urls = local_files(f"hestats-{kind}")
+    seen_all = []
     for page in [landing] + _year_pages(landing, kind):
         try:
-            for u in find_links(page, SHEET_LINK):
-                if re.search(want, u, re.I) and u not in urls:
+            links = find_links(page, SHEET_LINK)
+            seen_all += links
+            picked = [u for u in links if re.search(want, u, re.I)]
+            # a year page's spreadsheets are all candidates if none match the name hint
+            for u in picked or links:
+                if u not in urls:
                     urls.append(u)
         except Exception as e:  # noqa: BLE001
             log.warning("%s page failed %s: %s", kind, page, e)
+    log.info("%s: sample spreadsheet links: %s", kind, seen_all[:12])
     log.info("%s: %d candidate files", kind, len(urls))
     return urls
 
@@ -129,12 +135,12 @@ def parse_staff(content, url):
 
 def load(samples_dir=None):
     students, staff = [], []
-    for url in _files("student", STUDENT_LANDING, r"section[-_ ]?2|all[-_ ]students"):
+    for url in _files("student", STUDENT_LANDING, r"section[-_ ]?2\b|all[-_ ]students|section-2-"):
         try:
             students += parse_students(fetch(url, binary=True), url)
         except Exception as e:  # noqa: BLE001
             log.warning("student file failed %s: %s", url, e)
-    for url in _files("staff", STAFF_LANDING, r"staff|fte"):
+    for url in _files("staff", STAFF_LANDING, r"fte|staff[-_ ]numbers|staff-data|function"):
         try:
             staff += parse_staff(fetch(url, binary=True), url)
         except Exception as e:  # noqa: BLE001

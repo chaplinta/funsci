@@ -271,10 +271,12 @@ def test_analysis_runs(offline):
 
 def test_is_person():
     from etl.normalise import is_person, person_key
-    for n in ["Research Admin Officer", "N/A", "TBA", "Research Office", "Curtin University", "Officer", "Director"]:
+    for n in ["Research Admin Officer", "N/A", "TBA", "Research Office", "Curtin University", "Officer", "Director",
+              "Dr Dr Dr", "Prof Curtin University"]:
         assert not is_person(n), n
         assert person_key(n) is None
-    for n in ["Prof Jane Smith", "Dr Smith", "SMITH Jane", "A/Prof Lee Arnold", "Grant Hill"]:
+    for n in ["Prof Jane Smith", "Dr Smith", "SMITH Jane", "A/Prof Lee Arnold", "Grant Hill",
+              "Prof David Officer", "Dr Robert Center", "A/Pr Jacqueline Center"]:
         assert is_person(n), n
 
 
