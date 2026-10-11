@@ -36,21 +36,29 @@ def _year_pages(landing, kind):
 
 
 def _files(kind, landing, want):
+    """Landing -> year pages -> resource pages -> spreadsheets. `want` picks resource pages by URL."""
     urls = local_files(f"hestats-{kind}")
-    seen_all = []
+    resources, all_res = [], []
     for page in [landing] + _year_pages(landing, kind):
         try:
-            links = find_links(page, SHEET_LINK)
-            seen_all += links
-            picked = [u for u in links if re.search(want, u, re.I)]
-            # a year page's spreadsheets are all candidates if none match the name hint
-            for u in picked or links:
+            res = find_links(page, r"/higher-education-statistics/resources/")
+        except Exception as e:  # noqa: BLE001
+            log.warning("%s page failed %s: %s", kind, page, e)
+            continue
+        all_res += res
+        for u in [r for r in res if re.search(want, r, re.I)]:
+            if u not in resources and (year_from_name(u) or FIRST_YEAR) >= FIRST_YEAR:
+                resources.append(u)
+    log.info("%s: %d resource pages picked of %d; sample %s", kind, len(resources), len(set(all_res)),
+             sorted(set(all_res))[:40])
+    for page in resources:
+        try:
+            for u in find_links(page, SHEET_LINK):
                 if u not in urls:
                     urls.append(u)
         except Exception as e:  # noqa: BLE001
-            log.warning("%s page failed %s: %s", kind, page, e)
-    log.info("%s: sample spreadsheet links: %s", kind, seen_all[:12])
-    log.info("%s: %d candidate files", kind, len(urls))
+            log.warning("%s resource failed %s: %s", kind, page, e)
+    log.info("%s: %d candidate files: %s", kind, len(urls), urls[:10])
     return urls
 
 
@@ -135,12 +143,12 @@ def parse_staff(content, url):
 
 def load(samples_dir=None):
     students, staff = [], []
-    for url in _files("student", STUDENT_LANDING, r"section[-_ ]?2\b|all[-_ ]students|section-2-"):
+    for url in _files("student", STUDENT_LANDING, r"section-?2\b|section-2-|all-students|student-summary-time-series"):
         try:
             students += parse_students(fetch(url, binary=True), url)
         except Exception as e:  # noqa: BLE001
             log.warning("student file failed %s: %s", url, e)
-    for url in _files("staff", STAFF_LANDING, r"fte|staff[-_ ]numbers|staff-data|function"):
+    for url in _files("staff", STAFF_LANDING, r"staff|fte"):
         try:
             staff += parse_staff(fetch(url, binary=True), url)
         except Exception as e:  # noqa: BLE001
